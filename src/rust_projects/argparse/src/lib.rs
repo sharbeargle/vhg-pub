@@ -52,7 +52,7 @@ impl ArgConfigs {
                 description: description,
             });
         }
-        
+
         self
     }
 
@@ -73,7 +73,7 @@ impl ArgConfigs {
                 description: description,
             });
         }
-        
+
         self
     }
 
@@ -85,15 +85,17 @@ impl ArgConfigs {
         description: String,
     ) -> Self {
         if required {
-            self.required_positional_arguments.push(PositionalArgumentConfig {
-                name: name,
-                description: description,
-            });
+            self.required_positional_arguments
+                .push(PositionalArgumentConfig {
+                    name: name,
+                    description: description,
+                });
         } else {
-            self.optional_positional_arguments.push(PositionalArgumentConfig {
-                name: name,
-                description: description,
-            });
+            self.optional_positional_arguments
+                .push(PositionalArgumentConfig {
+                    name: name,
+                    description: description,
+                });
         }
 
         self
@@ -117,7 +119,8 @@ impl Parser {
         let mut help_output = format!("\n{}\n\n", &self.description);
 
         help_output.push_str("usage: COMMAND ");
-        { // Iterate through the config building the ouput for usage
+        {
+            // Iterate through the config building the ouput for usage
             for flag in &self.arg_config.required_flags {
                 help_output.push_str(&format!("-{} ", flag.flag));
             }
@@ -131,7 +134,7 @@ impl Parser {
             if self.arg_config.optional_flags.len() > 0 {
                 help_output.push_str("] ");
             }
-            
+
             for flag in &self.arg_config.required_named_arguments {
                 help_output.push_str(&format!("--{}=VALUE ", flag.argument));
             }
