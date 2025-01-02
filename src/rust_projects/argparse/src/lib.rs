@@ -1,94 +1,79 @@
 use std::vec;
 
 #[derive(Debug)]
-struct ShortFlagConfig {
+struct FlagConfig {
     flag: char,
-    required: bool,
     description: String,
 }
 
 #[derive(Debug)]
-struct LongFlagConfig {
+struct NamedArgumentConfig {
     argument: String,
-    required: bool,
-    with_value: bool,
-    description: String,
-}
-
-#[derive(Debug)]
-struct ShortLongFlagConfig {
-    flag: char,
-    argument: String,
-    required: bool,
-    with_value: bool,
     description: String,
 }
 
 #[derive(Debug)]
 struct PositionalArgumentConfig {
     name: String,
-    required: bool,
     description: String,
 }
 
 #[derive(Debug)]
 pub struct ArgConfigs {
-    short_flags: Vec<ShortFlagConfig>,
-    long_flags: Vec<LongFlagConfig>,
-    short_long_flags: Vec<ShortLongFlagConfig>,
-    positionals: Vec<PositionalArgumentConfig>,
+    optional_flags: Vec<FlagConfig>,
+    required_flags: Vec<FlagConfig>,
+    optional_named_arguments: Vec<NamedArgumentConfig>,
+    required_named_arguments: Vec<NamedArgumentConfig>,
+    optional_positional_arguments: Vec<PositionalArgumentConfig>,
+    required_positional_arguments: Vec<PositionalArgumentConfig>,
 }
 
 pub fn new_argconfig() -> ArgConfigs {
     ArgConfigs {
-        short_flags: vec![],
-        long_flags: vec![],
-        short_long_flags: vec![],
-        positionals: vec![],
+        optional_flags: vec![],
+        required_flags: vec![],
+        optional_named_arguments: vec![],
+        required_named_arguments: vec![],
+        optional_positional_arguments: vec![],
+        required_positional_arguments: vec![],
     }
 }
 
 impl ArgConfigs {
     pub fn add_flag(mut self, flag: char, required: bool, description: String) -> Self {
-        self.short_flags.push(ShortFlagConfig {
-            flag: flag,
-            required: required,
-            description: description,
-        });
+        if required {
+            self.required_flags.push(FlagConfig {
+                flag: flag,
+                description: description,
+            });
+        } else {
+            self.optional_flags.push(FlagConfig {
+                flag: flag,
+                description: description,
+            });
+        }
+        
         self
     }
 
-    pub fn add_argument(
+    pub fn add_named_argument(
         mut self,
         argument: String,
         required: bool,
-        with_value: bool,
         description: String,
     ) -> Self {
-        self.long_flags.push(LongFlagConfig {
-            argument: argument,
-            required: required,
-            with_value: with_value,
-            description: description,
-        });
-        self
-    }
-
-    pub fn add_flag_with_argument(
-        mut self,
-        flag: char,
-        argument: String,
-        required: bool,
-        with_value: bool,
-        description: String,
-    ) -> Self {
-        self.short_long_flags.push(ShortLongFlagConfig {
-            flag: flag,
-            argument: argument,
-            required: required,
-            with_value: with_value,
-            description: description,
-        });
+        if required {
+            self.required_named_arguments.push(NamedArgumentConfig {
+                argument: argument,
+                description: description,
+            });
+        } else {
+            self.optional_named_arguments.push(NamedArgumentConfig {
+                argument: argument,
+                description: description,
+            });
+        }
+        
         self
     }
 
@@ -99,11 +84,18 @@ impl ArgConfigs {
         required: bool,
         description: String,
     ) -> Self {
-        self.positionals.push(PositionalArgumentConfig {
-            name: name,
-            required: required,
-            description: description,
-        });
+        if required {
+            self.required_positional_arguments.push(PositionalArgumentConfig {
+                name: name,
+                description: description,
+            });
+        } else {
+            self.optional_positional_arguments.push(PositionalArgumentConfig {
+                name: name,
+                description: description,
+            });
+        }
+
         self
     }
 }
@@ -122,98 +114,80 @@ pub fn new_parser(arg_config: ArgConfigs, description: String) -> Parser {
 
 impl Parser {
     pub fn show_help(&self) {
-        println!();
-        println!();
-        println!("{}", &self.description);
-        println!();
-        println!();
-        
-        // Iterate through the config building the ouput
-        print!("COMMAND ");
+        let mut help_output = format!("\n{}\n\n", &self.description);
 
-        for flag in &self.arg_config.short_flags {
-            if flag.required {
-                print!("-{} ", flag.flag);
+        help_output.push_str("usage: COMMAND ");
+        { // Iterate through the config building the ouput for usage
+            for flag in &self.arg_config.required_flags {
+                help_output.push_str(&format!("-{} ", flag.flag));
             }
-        }
 
-        for flag in &self.arg_config.long_flags {
-            if flag.required {
-                print!("--{} ", flag.argument);
+            if self.arg_config.optional_flags.len() > 0 {
+                help_output.push_str("[-");
             }
-            if flag.with_value {
-                print!("VALUE ");
+            for flag in &self.arg_config.optional_flags {
+                help_output.push_str(&format!("{}", flag.flag));
             }
-        }
-
-        for flag in &self.arg_config.short_long_flags {
-            if flag.required {
-                print!("--{} ", flag.argument);
+            if self.arg_config.optional_flags.len() > 0 {
+                help_output.push_str("] ");
             }
-            if flag.with_value {
-                print!("VALUE ");
+            
+            for flag in &self.arg_config.required_named_arguments {
+                help_output.push_str(&format!("--{}=VALUE ", flag.argument));
             }
-        }
 
-        for flag in &self.arg_config.positionals {
-            if flag.required {
-                print!("{} ", flag.name);
+            for flag in &self.arg_config.optional_named_arguments {
+                help_output.push_str(&format!("[--{}=VALUE] ", flag.argument));
             }
+
+            for flag in &self.arg_config.required_positional_arguments {
+                help_output.push_str(&format!("{} ", flag.name));
+            }
+
+            for flag in &self.arg_config.optional_positional_arguments {
+                help_output.push_str(&format!("[{}] ", flag.name));
+            }
+        } // end building usage line
+
+        help_output.push_str("\n\n\n\tFlags:\n");
+
+        for flag in &self.arg_config.required_flags {
+            help_output.push_str(&format!("\t\t-{}\t(REQUIRED)\n", flag.flag));
+            help_output.push_str(&format!("\t\t\t{}\n\n", flag.description));
         }
 
-        println!();
-        println!();
-
-        for flag in &self.arg_config.short_flags {
-            let required = match flag.required {
-                true => " REQUIRED ",
-                false => " ",
-            };
-            println!("    -{}{}{}", flag.flag, required, flag.description);
-        }
-        for flag in &self.arg_config.long_flags {
-            let required = match flag.required {
-                true => " REQUIRED ",
-                false => " ",
-            };
-            let has_value = match flag.with_value {
-                true => "=VALUE ",
-                false => " ",
-            };
-            println!(
-                "    --{}{}{}{}",
-                flag.argument, has_value, required, flag.description
-            );
-        }
-        for flag in &self.arg_config.short_long_flags {
-            let required = match flag.required {
-                true => " REQUIRED ",
-                false => " ",
-            };
-            let has_value = match flag.with_value {
-                true => "=VALUE ",
-                false => " ",
-            };
-            println!(
-                "    -{}, --{}{}{}{}",
-                flag.flag, flag.argument, has_value, required, flag.description
-            );
+        for flag in &self.arg_config.optional_flags {
+            help_output.push_str(&format!("\t\t-{}\n", flag.flag));
+            help_output.push_str(&format!("\t\t\t{}\n\n", flag.description));
         }
 
-        if self.arg_config.positionals.len() > 0 {
-            println!();
-            println!("Positionals");
-        }
-        for flag in &self.arg_config.positionals {
-            let required = match flag.required {
-                true => " REQUIRED ",
-                false => " ",
-            };
+        help_output.push_str("\n\tNamed Arguments:\n");
 
-            println!("    {} {}: {}", flag.name, required, flag.description);
+        for flag in &self.arg_config.required_named_arguments {
+            help_output.push_str(&format!("\t\t--{}=VALUE\t(REQUIRED)\n", flag.argument));
+            help_output.push_str(&format!("\t\t\t{}\n\n", flag.description));
         }
-        println!();
-        println!();
+
+        for flag in &self.arg_config.optional_named_arguments {
+            help_output.push_str(&format!("\t\t--{}=VALUE\n", flag.argument));
+            help_output.push_str(&format!("\t\t\t{}\n\n", flag.description));
+        }
+
+        help_output.push_str("\n\tPositional Arguments:\n");
+
+        for flag in &self.arg_config.required_positional_arguments {
+            help_output.push_str(&format!("\t\t{}\t(REQUIRED)\n", flag.name));
+            help_output.push_str(&format!("\t\t\t{}\n\n", flag.description));
+        }
+
+        for flag in &self.arg_config.optional_positional_arguments {
+            help_output.push_str(&format!("\t\t{}\n", flag.name));
+            help_output.push_str(&format!("\t\t\t{}\n\n", flag.description));
+        }
+
+        help_output.push_str("\n\n");
+
+        print!("{}", help_output);
     }
 }
 
@@ -222,9 +196,10 @@ mod tests {
     //use super::*;
 
     #[test]
-    fn it_works() {
+    fn add_flag() {
         let arg_config = crate::new_argconfig().add_flag('c', false, "Count chars".to_string());
 
-        assert_eq!(arg_config.short_flags.len(), 1);
+        assert_eq!(arg_config.optional_flags.len(), 1);
+        assert_eq!(arg_config.required_flags.len(), 0);
     }
 }
