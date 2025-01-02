@@ -119,8 +119,8 @@ impl Parser {
         let mut help_output = format!("\n{}\n\n", &self.description);
 
         help_output.push_str("usage: COMMAND ");
+        // Iterate through the config building the ouput for usage
         {
-            // Iterate through the config building the ouput for usage
             for flag in &self.arg_config.required_flags {
                 help_output.push_str(&format!("-{} ", flag.flag));
             }
