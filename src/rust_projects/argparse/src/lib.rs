@@ -1,6 +1,14 @@
 use std::vec;
 
 #[derive(Debug)]
+pub enum ArgType {
+    INTEGER,
+    FLOAT,
+    CHAR,
+    STRING,
+}
+
+#[derive(Debug)]
 struct FlagConfig {
     flag: char,
     description: String,
@@ -10,12 +18,14 @@ struct FlagConfig {
 struct NamedArgumentConfig {
     argument: String,
     description: String,
+    arg_type: ArgType,
 }
 
 #[derive(Debug)]
 struct PositionalArgumentConfig {
     name: String,
     description: String,
+    arg_type: ArgType,
 }
 
 #[derive(Debug)]
@@ -61,16 +71,19 @@ impl ArgConfigs {
         argument: String,
         required: bool,
         description: String,
+        arg_type: ArgType,
     ) -> Self {
         if required {
             self.required_named_arguments.push(NamedArgumentConfig {
                 argument: argument,
                 description: description,
+                arg_type: arg_type,
             });
         } else {
             self.optional_named_arguments.push(NamedArgumentConfig {
                 argument: argument,
                 description: description,
+                arg_type: arg_type,
             });
         }
 
@@ -83,18 +96,21 @@ impl ArgConfigs {
         name: String,
         required: bool,
         description: String,
+        arg_type: ArgType,
     ) -> Self {
         if required {
             self.required_positional_arguments
                 .push(PositionalArgumentConfig {
                     name: name,
                     description: description,
+                    arg_type: arg_type,
                 });
         } else {
             self.optional_positional_arguments
                 .push(PositionalArgumentConfig {
                     name: name,
                     description: description,
+                    arg_type: arg_type,
                 });
         }
 
@@ -121,10 +137,12 @@ impl Parser {
         help_output.push_str("usage: COMMAND ");
         // Iterate through the config building the ouput for usage
         {
+            // Required flags
             for flag in &self.arg_config.required_flags {
                 help_output.push_str(&format!("-{} ", flag.flag));
             }
 
+            // Optional flags
             if self.arg_config.optional_flags.len() > 0 {
                 help_output.push_str("[-");
             }
@@ -135,18 +153,22 @@ impl Parser {
                 help_output.push_str("] ");
             }
 
+            // Required named arguments
             for flag in &self.arg_config.required_named_arguments {
                 help_output.push_str(&format!("--{}=VALUE ", flag.argument));
             }
 
+            // Optional named arguments
             for flag in &self.arg_config.optional_named_arguments {
                 help_output.push_str(&format!("[--{}=VALUE] ", flag.argument));
             }
 
+            // Required positional arguments
             for flag in &self.arg_config.required_positional_arguments {
                 help_output.push_str(&format!("{} ", flag.name));
             }
 
+            // Required optional arguments
             for flag in &self.arg_config.optional_positional_arguments {
                 help_output.push_str(&format!("[{}] ", flag.name));
             }
@@ -167,24 +189,33 @@ impl Parser {
         help_output.push_str("\n\tNamed Arguments:\n");
 
         for flag in &self.arg_config.required_named_arguments {
-            help_output.push_str(&format!("\t\t--{}=VALUE\t(REQUIRED)\n", flag.argument));
+            help_output.push_str(&format!(
+                "\t\t--{}=VALUE\t{:?} (REQUIRED)\n",
+                flag.argument, flag.arg_type
+            ));
             help_output.push_str(&format!("\t\t\t{}\n\n", flag.description));
         }
 
         for flag in &self.arg_config.optional_named_arguments {
-            help_output.push_str(&format!("\t\t--{}=VALUE\n", flag.argument));
+            help_output.push_str(&format!(
+                "\t\t--{}=VALUE\t{:?}\n",
+                flag.argument, flag.arg_type
+            ));
             help_output.push_str(&format!("\t\t\t{}\n\n", flag.description));
         }
 
         help_output.push_str("\n\tPositional Arguments:\n");
 
         for flag in &self.arg_config.required_positional_arguments {
-            help_output.push_str(&format!("\t\t{}\t(REQUIRED)\n", flag.name));
+            help_output.push_str(&format!(
+                "\t\t{}\t{:?} (REQUIRED)\n",
+                flag.name, flag.arg_type
+            ));
             help_output.push_str(&format!("\t\t\t{}\n\n", flag.description));
         }
 
         for flag in &self.arg_config.optional_positional_arguments {
-            help_output.push_str(&format!("\t\t{}\n", flag.name));
+            help_output.push_str(&format!("\t\t{}\t{:?}\n", flag.name, flag.arg_type));
             help_output.push_str(&format!("\t\t\t{}\n\n", flag.description));
         }
 
