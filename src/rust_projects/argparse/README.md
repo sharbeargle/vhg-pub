@@ -31,3 +31,11 @@ In Rust ELF binaries, a function defined in the ELF header's .init_array section
 sets up the argc and argv variables so that they can be accessed in the Rust
 program.
 ([details](https://github.com/rust-lang/rust/blob/1.52.0/library/std/src/sys/unix/args.rs#L87))
+
+NOTE: In Linux, you can read the process's command line values from the proc
+filesystem. Just note that each string is null terminated so you won't see spaces.
+
+```
+$ cat /proc/1998/cmdline 
+./target/debug/example-h--x=exinputpos1
+```
