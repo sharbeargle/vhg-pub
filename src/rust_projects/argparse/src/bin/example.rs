@@ -2,23 +2,24 @@ use argparse;
 
 fn main() {
     let arg_config = argparse::new_argconfig()
-        .add_flag('a', true, "Enable flag a".to_string())
-        .add_flag('B', true, "Enable flag B".to_string())
-        .add_flag('c', false, "Enable flag c".to_string())
-        .add_flag('D', false, "Enable flag D".to_string())
+        .add_flag("myflaga".to_string(), 'a', "Enable flag a".to_string())
+        .add_flag("myflagb".to_string(), 'B', "Enable flag B".to_string())
         .add_named_argument(
+            "myarg1".to_string(),
             "arg1".to_string(),
             true,
             "Arg1 input".to_string(),
             argparse::ArgType::INTEGER,
         )
         .add_named_argument(
+            "myarg2".to_string(),
             "arg2".to_string(),
             false,
             "arg2 input".to_string(),
             argparse::ArgType::STRING,
         )
         .add_named_argument(
+            "myarg3".to_string(),
             "arg3".to_string(),
             false,
             "arg3 input".to_string(),

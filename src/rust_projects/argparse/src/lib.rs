@@ -1,4 +1,4 @@
-use std::vec;
+use std::{collections::hash_map, vec};
 
 #[derive(Debug)]
 pub enum ArgType {
@@ -10,12 +10,14 @@ pub enum ArgType {
 
 #[derive(Debug)]
 struct FlagConfig {
+    name: String,
     flag: char,
     description: String,
 }
 
 #[derive(Debug)]
 struct NamedArgumentConfig {
+    name: String,
     argument: String,
     description: String,
     arg_type: ArgType,
@@ -30,8 +32,7 @@ struct PositionalArgumentConfig {
 
 #[derive(Debug)]
 pub struct ArgConfigs {
-    optional_flags: Vec<FlagConfig>,
-    required_flags: Vec<FlagConfig>,
+    flags: Vec<FlagConfig>,
     optional_named_arguments: Vec<NamedArgumentConfig>,
     required_named_arguments: Vec<NamedArgumentConfig>,
     optional_positional_arguments: Vec<PositionalArgumentConfig>,
@@ -40,8 +41,7 @@ pub struct ArgConfigs {
 
 pub fn new_argconfig() -> ArgConfigs {
     ArgConfigs {
-        optional_flags: vec![],
-        required_flags: vec![],
+        flags: vec![],
         optional_named_arguments: vec![],
         required_named_arguments: vec![],
         optional_positional_arguments: vec![],
@@ -50,24 +50,19 @@ pub fn new_argconfig() -> ArgConfigs {
 }
 
 impl ArgConfigs {
-    pub fn add_flag(mut self, flag: char, required: bool, description: String) -> Self {
-        if required {
-            self.required_flags.push(FlagConfig {
-                flag: flag,
-                description: description,
-            });
-        } else {
-            self.optional_flags.push(FlagConfig {
-                flag: flag,
-                description: description,
-            });
-        }
+    pub fn add_flag(mut self, name: String, flag: char, description: String) -> Self {
+        self.flags.push(FlagConfig {
+            name: name,
+            flag: flag,
+            description: description,
+        });
 
         self
     }
 
     pub fn add_named_argument(
         mut self,
+        name: String,
         argument: String,
         required: bool,
         description: String,
@@ -75,12 +70,14 @@ impl ArgConfigs {
     ) -> Self {
         if required {
             self.required_named_arguments.push(NamedArgumentConfig {
+                name: name,
                 argument: argument,
                 description: description,
                 arg_type: arg_type,
             });
         } else {
             self.optional_named_arguments.push(NamedArgumentConfig {
+                name: name,
                 argument: argument,
                 description: description,
                 arg_type: arg_type,
@@ -118,38 +115,46 @@ impl ArgConfigs {
     }
 }
 
+pub enum ArgValue {
+    flag(bool),
+    integer(i32),
+    floating_point(f32),
+    string(String),
+}
+
 pub struct Parser {
     arg_config: ArgConfigs,
     description: String,
+    parsed_args: hash_map::HashMap<String, ArgValue>,
 }
 
 pub fn new_parser(arg_config: ArgConfigs, description: String) -> Parser {
     Parser {
         arg_config: arg_config,
         description: description,
+        parsed_args: hash_map::HashMap::new(),
     }
 }
 
 impl Parser {
+    pub fn get(&self, name: &str) -> Option<&ArgValue> {
+        self.parsed_args.get(name)
+    }
+
     pub fn show_help(&self) {
         let mut help_output = format!("\n{}\n\n", &self.description);
 
         help_output.push_str("usage: COMMAND ");
         // Iterate through the config building the ouput for usage
         {
-            // Required flags
-            for flag in &self.arg_config.required_flags {
-                help_output.push_str(&format!("-{} ", flag.flag));
-            }
-
-            // Optional flags
-            if self.arg_config.optional_flags.len() > 0 {
+            // Flags
+            if self.arg_config.flags.len() > 0 {
                 help_output.push_str("[-");
             }
-            for flag in &self.arg_config.optional_flags {
+            for flag in &self.arg_config.flags {
                 help_output.push_str(&format!("{}", flag.flag));
             }
-            if self.arg_config.optional_flags.len() > 0 {
+            if self.arg_config.flags.len() > 0 {
                 help_output.push_str("] ");
             }
 
@@ -176,12 +181,7 @@ impl Parser {
 
         help_output.push_str("\n\n\n\tFlags:\n");
 
-        for flag in &self.arg_config.required_flags {
-            help_output.push_str(&format!("\t\t-{}\t(REQUIRED)\n", flag.flag));
-            help_output.push_str(&format!("\t\t\t{}\n\n", flag.description));
-        }
-
-        for flag in &self.arg_config.optional_flags {
+        for flag in &self.arg_config.flags {
             help_output.push_str(&format!("\t\t-{}\n", flag.flag));
             help_output.push_str(&format!("\t\t\t{}\n\n", flag.description));
         }
@@ -231,9 +231,9 @@ mod tests {
 
     #[test]
     fn add_flag() {
-        let arg_config = crate::new_argconfig().add_flag('c', false, "Count chars".to_string());
+        let arg_config =
+            crate::new_argconfig().add_flag("myflag".to_string(), 'c', "Count chars".to_string());
 
-        assert_eq!(arg_config.optional_flags.len(), 1);
-        assert_eq!(arg_config.required_flags.len(), 0);
+        assert_eq!(arg_config.flags.len(), 1);
     }
 }
