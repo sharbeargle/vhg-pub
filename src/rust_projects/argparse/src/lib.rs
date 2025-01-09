@@ -9,6 +9,7 @@ pub enum ArgType {
 }
 
 #[derive(Debug)]
+#[allow(unused)]
 struct FlagConfig {
     name: String,
     flag: char,
@@ -16,6 +17,7 @@ struct FlagConfig {
 }
 
 #[derive(Debug)]
+#[allow(unused)]
 struct NamedArgumentConfig {
     name: String,
     argument: String,
@@ -31,7 +33,7 @@ struct PositionalArgumentConfig {
 }
 
 #[derive(Debug)]
-pub struct ArgConfigs {
+struct ArgConfigs {
     flags: Vec<FlagConfig>,
     optional_named_arguments: Vec<NamedArgumentConfig>,
     required_named_arguments: Vec<NamedArgumentConfig>,
@@ -39,19 +41,38 @@ pub struct ArgConfigs {
     required_positional_arguments: Vec<PositionalArgumentConfig>,
 }
 
-pub fn new_argconfig() -> ArgConfigs {
-    ArgConfigs {
-        flags: vec![],
-        optional_named_arguments: vec![],
-        required_named_arguments: vec![],
-        optional_positional_arguments: vec![],
-        required_positional_arguments: vec![],
+impl ArgConfigs {}
+
+pub enum ArgValue {
+    Boolean(bool),
+    Integer(i32),
+    Float(f32),
+    String(String),
+}
+
+pub struct Parser {
+    arg_config: ArgConfigs,
+    description: String,
+    parsed_args: hash_map::HashMap<String, ArgValue>,
+}
+
+pub fn new_parser(description: String) -> Parser {
+    Parser {
+        arg_config: ArgConfigs {
+            flags: vec![],
+            optional_named_arguments: vec![],
+            required_named_arguments: vec![],
+            optional_positional_arguments: vec![],
+            required_positional_arguments: vec![],
+        },
+        description: description,
+        parsed_args: hash_map::HashMap::new(),
     }
 }
 
-impl ArgConfigs {
+impl Parser {
     pub fn add_flag(mut self, name: String, flag: char, description: String) -> Self {
-        self.flags.push(FlagConfig {
+        self.arg_config.flags.push(FlagConfig {
             name: name,
             flag: flag,
             description: description,
@@ -69,19 +90,23 @@ impl ArgConfigs {
         arg_type: ArgType,
     ) -> Self {
         if required {
-            self.required_named_arguments.push(NamedArgumentConfig {
-                name: name,
-                argument: argument,
-                description: description,
-                arg_type: arg_type,
-            });
+            self.arg_config
+                .required_named_arguments
+                .push(NamedArgumentConfig {
+                    name: name,
+                    argument: argument,
+                    description: description,
+                    arg_type: arg_type,
+                });
         } else {
-            self.optional_named_arguments.push(NamedArgumentConfig {
-                name: name,
-                argument: argument,
-                description: description,
-                arg_type: arg_type,
-            });
+            self.arg_config
+                .optional_named_arguments
+                .push(NamedArgumentConfig {
+                    name: name,
+                    argument: argument,
+                    description: description,
+                    arg_type: arg_type,
+                });
         }
 
         self
@@ -96,14 +121,16 @@ impl ArgConfigs {
         arg_type: ArgType,
     ) -> Self {
         if required {
-            self.required_positional_arguments
+            self.arg_config
+                .required_positional_arguments
                 .push(PositionalArgumentConfig {
                     name: name,
                     description: description,
                     arg_type: arg_type,
                 });
         } else {
-            self.optional_positional_arguments
+            self.arg_config
+                .optional_positional_arguments
                 .push(PositionalArgumentConfig {
                     name: name,
                     description: description,
@@ -113,33 +140,37 @@ impl ArgConfigs {
 
         self
     }
-}
 
-pub enum ArgValue {
-    flag(bool),
-    integer(i32),
-    floating_point(f32),
-    string(String),
-}
-
-pub struct Parser {
-    arg_config: ArgConfigs,
-    description: String,
-    parsed_args: hash_map::HashMap<String, ArgValue>,
-}
-
-pub fn new_parser(arg_config: ArgConfigs, description: String) -> Parser {
-    Parser {
-        arg_config: arg_config,
-        description: description,
-        parsed_args: hash_map::HashMap::new(),
+    pub fn get_bool_arg(&self, name: &str) -> Option<bool> {
+        match self.parsed_args.get(name) {
+            Some(ArgValue::Boolean(val)) => Some(*val),
+            _ => None,
+        }
     }
-}
 
-impl Parser {
-    pub fn get(&self, name: &str) -> Option<&ArgValue> {
-        self.parsed_args.get(name)
+    pub fn get_integer_arg(&self, name: &str) -> Option<i32> {
+        match self.parsed_args.get(name) {
+            Some(ArgValue::Integer(val)) => Some(*val),
+            _ => None,
+        }
     }
+
+    pub fn get_float_arg(&self, name: &str) -> Option<f32> {
+        match self.parsed_args.get(name) {
+            Some(ArgValue::Float(val)) => Some(*val),
+            _ => None,
+        }
+    }
+
+    pub fn get_string_arg(&self, name: &str) -> Option<&str> {
+        match self.parsed_args.get(name) {
+            Some(ArgValue::String(val)) => Some(val),
+            _ => None,
+        }
+    }
+
+    /// TODO: Parse the args
+    pub fn parse() {}
 
     pub fn show_help(&self) {
         let mut help_output = format!("\n{}\n\n", &self.description);
@@ -231,9 +262,12 @@ mod tests {
 
     #[test]
     fn add_flag() {
-        let arg_config =
-            crate::new_argconfig().add_flag("myflag".to_string(), 'c', "Count chars".to_string());
+        let parser = crate::new_parser("My parser".to_string()).add_flag(
+            "myflag".to_string(),
+            'c',
+            "Count chars".to_string(),
+        );
 
-        assert_eq!(arg_config.flags.len(), 1);
+        assert_eq!(parser.arg_config.flags.len(), 1);
     }
 }
