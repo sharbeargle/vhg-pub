@@ -43,11 +43,20 @@ struct ArgConfigs {
 
 impl ArgConfigs {}
 
+#[derive(Debug)]
 pub enum ArgValue {
     Boolean(bool),
     Integer(i32),
     Float(f32),
     String(String),
+}
+
+#[allow(unused)]
+#[derive(Debug)]
+enum ArgToken {
+    Flag(char),
+    NamedArgument { arg: String, value: String },
+    PositionalArgument(String),
 }
 
 pub struct Parser {
@@ -169,8 +178,39 @@ impl Parser {
         }
     }
 
-    /// TODO: Parse the args
-    pub fn parse() {}
+    /// Parse the arguments
+    pub fn parse(self) -> Self {
+        let mut toks: Vec<ArgToken> = Vec::new();
+
+        // Parse the raw tokens (i.e. just as strings)
+        for arg in std::env::args() {
+            if arg.starts_with("--") {
+                // Process a named arg
+                let arg_val_pair = arg.strip_prefix("--").unwrap().split_once('=').unwrap();
+                // TODO: validations if '=' missing or invalid characters or length
+                toks.push(ArgToken::NamedArgument {
+                    arg: arg_val_pair.0.to_owned(),
+                    value: arg_val_pair.1.to_owned(),
+                });
+            } else if arg.starts_with("-") {
+                // Process a flag
+                let arg_values = arg.strip_prefix("-").unwrap().to_owned();
+                // TODO: validations invalid characters or length
+                if arg_values.len() < 1 {
+                    panic!("Flags must have more than 0 items");
+                }
+                for f in arg_values.chars().into_iter() {
+                    toks.push(ArgToken::Flag(f));
+                }
+            } else {
+                // Process positional arguments
+                // TODO: validations invalid characters or length
+                toks.push(ArgToken::PositionalArgument(arg.to_owned()));
+            }
+        }
+
+        self
+    }
 
     pub fn show_help(&self) {
         let mut help_output = format!("\n{}\n\n", &self.description);

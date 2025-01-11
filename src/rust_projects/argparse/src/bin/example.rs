@@ -38,7 +38,8 @@ fn main() {
         false,
         "Positional argument 2".to_string(),
         argparse::ArgType::STRING,
-    );
+    )
+    .parse();
 
     parser.show_help();
     let mut buf = String::new();
