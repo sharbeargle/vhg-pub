@@ -1,4 +1,20 @@
-use std::{collections::hash_map, vec};
+pub mod parser_validations;
+
+use core::fmt;
+use std::{collections::hash_map, error::Error, vec};
+
+#[derive(Debug)]
+pub enum ParserError {
+    FlagValidationError(parser_validations::ParserValidationError),
+}
+
+impl Error for ParserError {}
+
+impl fmt::Display for ParserError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Oh no, something bad went down")
+    }
+}
 
 #[derive(Debug)]
 pub enum ArgType {
@@ -12,7 +28,8 @@ pub enum ArgType {
 #[allow(unused)]
 struct FlagConfig {
     name: String,
-    flag: char,
+    short_flag: char,
+    long_flag: Option<String>,
     description: String,
 }
 
@@ -80,10 +97,17 @@ pub fn new_parser(description: String) -> Parser {
 }
 
 impl Parser {
-    pub fn add_flag(mut self, name: String, flag: char, description: String) -> Self {
+    pub fn add_flag(
+        mut self,
+        name: String,
+        short_flag: char,
+        long_flag: Option<String>,
+        description: String,
+    ) -> Self {
         self.arg_config.flags.push(FlagConfig {
             name: name,
-            flag: flag,
+            short_flag: short_flag,
+            long_flag: long_flag,
             description: description,
         });
 
@@ -179,11 +203,13 @@ impl Parser {
     }
 
     /// Parse the arguments
-    pub fn parse(self) -> Self {
+    fn do_parse(self, args: std::env::Args) -> Result<Self, ParserError> {
+        // TODO: Handle -- to indicate end of options
+
         let mut toks: Vec<ArgToken> = Vec::new();
 
         // Parse the raw tokens (i.e. just as strings)
-        for arg in std::env::args() {
+        for arg in args {
             if arg.starts_with("--") {
                 // Process a named arg
                 let arg_val_pair = arg.strip_prefix("--").unwrap().split_once('=').unwrap();
@@ -194,11 +220,13 @@ impl Parser {
                 });
             } else if arg.starts_with("-") {
                 // Process a flag
-                let arg_values = arg.strip_prefix("-").unwrap().to_owned();
-                // TODO: validations invalid characters or length
-                if arg_values.len() < 1 {
-                    panic!("Flags must have more than 0 items");
+                match parser_validations::validate_flag_format(&arg) {
+                    Ok(()) => {}
+                    Err(e) => {
+                        return Err(ParserError::FlagValidationError(e));
+                    }
                 }
+                let arg_values = arg.strip_prefix("-").unwrap().to_owned();
                 for f in arg_values.chars().into_iter() {
                     toks.push(ArgToken::Flag(f));
                 }
@@ -209,7 +237,11 @@ impl Parser {
             }
         }
 
-        self
+        Ok(self)
+    }
+
+    pub fn parse(self) -> Result<Self, ParserError> {
+        self.do_parse(std::env::args())
     }
 
     pub fn show_help(&self) {
@@ -223,7 +255,7 @@ impl Parser {
                 help_output.push_str("[-");
             }
             for flag in &self.arg_config.flags {
-                help_output.push_str(&format!("{}", flag.flag));
+                help_output.push_str(&format!("{}", flag.short_flag));
             }
             if self.arg_config.flags.len() > 0 {
                 help_output.push_str("] ");
@@ -253,7 +285,10 @@ impl Parser {
         help_output.push_str("\n\n\n\tFlags:\n");
 
         for flag in &self.arg_config.flags {
-            help_output.push_str(&format!("\t\t-{}\n", flag.flag));
+            help_output.push_str(&format!("\t\t-{}\n", flag.short_flag));
+            if let Some(long_flag) = &flag.long_flag {
+                help_output.push_str(&format!("\t\t--{}\n", long_flag));
+            }
             help_output.push_str(&format!("\t\t\t{}\n\n", flag.description));
         }
 
@@ -305,6 +340,7 @@ mod tests {
         let parser = crate::new_parser("My parser".to_string()).add_flag(
             "myflag".to_string(),
             'c',
+            None,
             "Count chars".to_string(),
         );
 

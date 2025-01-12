@@ -4,8 +4,18 @@ fn main() {
     let parser = argparse::new_parser(
         "This is an example app showing how to use argparse to parse commands".to_string(),
     )
-    .add_flag("myflaga".to_string(), 'a', "Enable flag a".to_string())
-    .add_flag("myflagb".to_string(), 'B', "Enable flag B".to_string())
+    .add_flag(
+        "myflaga".to_string(),
+        'a',
+        None,
+        "Enable flag a".to_string(),
+    )
+    .add_flag(
+        "myflagb".to_string(),
+        'B',
+        Some("Bflag".to_string()),
+        "Enable flag B".to_string(),
+    )
     .add_named_argument(
         "myarg1".to_string(),
         "arg1".to_string(),
@@ -39,7 +49,8 @@ fn main() {
         "Positional argument 2".to_string(),
         argparse::ArgType::STRING,
     )
-    .parse();
+    .parse()
+    .unwrap();
 
     parser.show_help();
     let mut buf = String::new();
