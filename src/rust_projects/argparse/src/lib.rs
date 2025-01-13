@@ -6,6 +6,7 @@ use std::{collections::hash_map, error::Error, vec};
 #[derive(Debug)]
 pub enum ParserError {
     FlagValidationError(parser_validations::ParserValidationError),
+    NamedArgValidationError(parser_validations::ParserValidationError),
 }
 
 impl Error for ParserError {}
@@ -212,23 +213,28 @@ impl Parser {
         for arg in args {
             if arg.starts_with("--") {
                 // Process a named arg
-                let arg_val_pair = arg.strip_prefix("--").unwrap().split_once('=').unwrap();
-                // TODO: validations if '=' missing or invalid characters or length
-                toks.push(ArgToken::NamedArgument {
-                    arg: arg_val_pair.0.to_owned(),
-                    value: arg_val_pair.1.to_owned(),
-                });
+                match parser_validations::validate_named_arguments_format(&arg) {
+                    Ok((arg_name, arg_val)) => {
+                        toks.push(ArgToken::NamedArgument {
+                            arg: arg_name,
+                            value: arg_val,
+                        });
+                    }
+                    Err(e) => {
+                        return Err(ParserError::NamedArgValidationError(e));
+                    }
+                }
             } else if arg.starts_with("-") {
                 // Process a flag
                 match parser_validations::validate_flag_format(&arg) {
-                    Ok(()) => {}
+                    Ok(flags) => {
+                        for f in flags {
+                            toks.push(ArgToken::Flag(f));
+                        }
+                    }
                     Err(e) => {
                         return Err(ParserError::FlagValidationError(e));
                     }
-                }
-                let arg_values = arg.strip_prefix("-").unwrap().to_owned();
-                for f in arg_values.chars().into_iter() {
-                    toks.push(ArgToken::Flag(f));
                 }
             } else {
                 // Process positional arguments
