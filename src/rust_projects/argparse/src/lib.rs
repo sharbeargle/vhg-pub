@@ -7,6 +7,7 @@ use std::{collections::hash_map, error::Error, vec};
 pub enum ParserError {
     FlagValidationError(parser_validations::ParserValidationError),
     NamedArgValidationError(parser_validations::ParserValidationError),
+    LongFlagValidationError(parser_validations::ParserValidationError),
 }
 
 impl Error for ParserError {}
@@ -72,7 +73,8 @@ pub enum ArgValue {
 #[allow(unused)]
 #[derive(Debug)]
 enum ArgToken {
-    Flag(char),
+    ShortFlag(char),
+    LongFlag(String),
     NamedArgument { arg: String, value: String },
     PositionalArgument(String),
 }
@@ -212,16 +214,28 @@ impl Parser {
         // Parse the raw tokens (i.e. just as strings)
         for arg in args {
             if arg.starts_with("--") {
-                // Process a named arg
-                match parser_validations::validate_named_arguments_format(&arg) {
-                    Ok((arg_name, arg_val)) => {
-                        toks.push(ArgToken::NamedArgument {
-                            arg: arg_name,
-                            value: arg_val,
-                        });
+                // We go with the named arg workflow if the arg contains an '='
+                if arg.contains('=') {
+                    // Process a named arg
+                    match parser_validations::validate_named_arguments_format(&arg) {
+                        Ok((arg_name, arg_val)) => {
+                            toks.push(ArgToken::NamedArgument {
+                                arg: arg_name,
+                                value: arg_val,
+                            });
+                        }
+                        Err(e) => {
+                            return Err(ParserError::NamedArgValidationError(e));
+                        }
                     }
-                    Err(e) => {
-                        return Err(ParserError::NamedArgValidationError(e));
+                } else {
+                    match parser_validations::validate_long_flag_format(&arg) {
+                        Ok(flag_name) => {
+                            toks.push(ArgToken::LongFlag(flag_name));
+                        }
+                        Err(e) => {
+                            return Err(ParserError::LongFlagValidationError(e));
+                        }
                     }
                 }
             } else if arg.starts_with("-") {
@@ -229,7 +243,7 @@ impl Parser {
                 match parser_validations::validate_flag_format(&arg) {
                     Ok(flags) => {
                         for f in flags {
-                            toks.push(ArgToken::Flag(f));
+                            toks.push(ArgToken::ShortFlag(f));
                         }
                     }
                     Err(e) => {
