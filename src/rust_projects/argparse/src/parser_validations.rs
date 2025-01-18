@@ -2,7 +2,7 @@ use std::{collections::hash_set::HashSet, error::Error, fmt};
 
 /// Helper functions for validating arguments
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ParserValidationError {
     FlagFormatError,
     InvalidFlag,
@@ -12,6 +12,7 @@ pub enum ParserValidationError {
     InvalidNamedArgName,
     NamedArgValueFormatError,
     InvalidNamedArgValue,
+    InvalidPositionalArgumentFormat,
 }
 
 impl Error for ParserValidationError {}
@@ -27,53 +28,69 @@ impl fmt::Display for ParserValidationError {
             Self::InvalidLongFlagName => write!(f, "Long flag name has invalid characters"),
             Self::NamedArgValueFormatError => write!(f, "Named arg value missing end quotes"),
             Self::InvalidNamedArgValue => write!(f, "Named arg value contains invalid characters"),
+            Self::InvalidPositionalArgumentFormat => {
+                write!(f, "Positional arg value contains invalid characters")
+            }
         }
     }
+}
+
+/// Verify that the argument name contains valid characters
+fn is_valid_arg_name(name: &str) -> bool {
+    let valid_non_alphanumerics: HashSet<char> = HashSet::from(['_', '-']);
+
+    if name.len() < 1 {
+        return false;
+    }
+
+    if !name.chars().nth(0).unwrap().is_alphanumeric() {
+        return false;
+    }
+
+    for c in name.chars().collect::<Vec<char>>()[1..].into_iter() {
+        if !(c.is_alphanumeric() || valid_non_alphanumerics.contains(c)) {
+            return false;
+        }
+    }
+    true
 }
 
 /// Validate the named arg
 pub fn validate_named_arguments_format(
     named_arg: &str,
 ) -> Result<(String, String), ParserValidationError> {
-    let arg_name: String;
-    let mut arg_value: String;
-
-    // TODO: Fix this. This length validation is wrong
-    // Validate length is at least five (two dashes + string + = + string)
-    if named_arg.len() < 5 {
+    // Validate length is at least 3 (two dashes + string)
+    if named_arg.len() < 3 {
         return Err(ParserValidationError::NamedArgFormatError);
     }
 
-    // Validate has an equal
-    match named_arg[2..].split_once("=") {
-        Some(arg_kv) => {
-            arg_name = arg_kv.0.to_owned();
-            arg_value = arg_kv.1.to_owned();
-        }
+    // Validate has an equal and split the arg into name and value
+    let (arg_name, mut arg_value): (String, String) = match named_arg[2..].split_once("=") {
+        Some(arg_kv) => (arg_kv.0.to_owned(), arg_kv.1.to_owned()),
         None => {
             return Err(ParserValidationError::NamedArgFormatError);
         }
+    };
+
+    // Validate arg name
+    if !is_valid_arg_name(&arg_name) {
+        return Err(ParserValidationError::InvalidNamedArgName);
     }
 
-    // Validate at the arg name has valid characters
-    for c in arg_name.chars() {
-        if !c.is_alphanumeric() {
-            return Err(ParserValidationError::InvalidNamedArgName);
-        }
-    }
-
-    // Process arg value with or without quotes
-    if arg_value.starts_with('"') {
-        arg_value = arg_value.strip_prefix('"').unwrap().to_owned();
-        if !arg_value.ends_with('"') {
+    // Remove quotes if present
+    if let Some(stripped_left) = arg_value.strip_prefix('"') {
+        // Expect that suffix quote exists as well if prefix quote exists
+        if let Some(stripped_right) = stripped_left.strip_suffix('"') {
+            arg_value = stripped_right.to_owned();
+        } else {
             return Err(ParserValidationError::NamedArgValueFormatError);
         }
-        arg_value = arg_value.strip_suffix('"').unwrap().to_owned();
-    } else {
-        for c in arg_value.chars() {
-            if !c.is_alphanumeric() {
-                return Err(ParserValidationError::NamedArgFormatError);
-            }
+    }
+
+    // Validate value characters are valid chars
+    for c in arg_value.chars() {
+        if !c.is_alphanumeric() {
+            return Err(ParserValidationError::NamedArgFormatError);
         }
     }
 
@@ -121,4 +138,42 @@ pub fn validate_flag_format(flag: &str) -> Result<Vec<char>, ParserValidationErr
     let flags: Vec<char> = seen.into_iter().collect();
 
     Ok(flags)
+}
+
+//TODO: Fix this function. It is not validating correctly
+pub fn validate_positional_arguments_format(arg: &str) -> Result<String, ParserValidationError> {
+    let mut arg_value = arg.to_owned();
+
+    // Remove quotes if present
+    if let Some(stripped_left) = arg_value.strip_prefix('"') {
+        // Expect that suffix quote exists as well if prefix quote exists
+        if let Some(stripped_right) = stripped_left.strip_suffix('"') {
+            arg_value = stripped_right.to_owned();
+        } else {
+            return Err(ParserValidationError::InvalidPositionalArgumentFormat);
+        }
+
+        return Ok(arg_value);
+    }
+
+    for c in arg_value.chars() {
+        if !c.is_alphanumeric() {
+            return Err(ParserValidationError::InvalidPositionalArgumentFormat);
+        }
+    }
+
+    Ok(arg_value)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::parser_validations::is_valid_arg_name;
+
+    #[test]
+    fn test_is_valid_arg_name() {
+        assert_eq!(is_valid_arg_name("myarg"), true);
+        assert_eq!(is_valid_arg_name("my_arg"), true);
+        assert_eq!(is_valid_arg_name("_myarg"), false);
+        assert_eq!(is_valid_arg_name("my arg"), false);
+    }
 }

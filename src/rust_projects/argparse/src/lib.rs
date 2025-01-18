@@ -8,6 +8,7 @@ pub enum ParserError {
     FlagValidationError(parser_validations::ParserValidationError),
     NamedArgValidationError(parser_validations::ParserValidationError),
     LongFlagValidationError(parser_validations::ParserValidationError),
+    PositionalArgumentValidationError(parser_validations::ParserValidationError),
 }
 
 impl Error for ParserError {}
@@ -252,8 +253,14 @@ impl Parser {
                 }
             } else {
                 // Process positional arguments
-                // TODO: validations invalid characters or length
-                toks.push(ArgToken::PositionalArgument(arg.to_owned()));
+                match parser_validations::validate_positional_arguments_format(&arg) {
+                    Ok(value) => {
+                        toks.push(ArgToken::PositionalArgument(value));
+                    }
+                    Err(e) => {
+                        return Err(ParserError::PositionalArgumentValidationError(e));
+                    }
+                }
             }
         }
 
