@@ -156,18 +156,20 @@ pub fn validate_positional_arguments_format(arg: &str) -> Result<String, ParserV
         return Ok(arg_value);
     }
 
+    /*
     for c in arg_value.chars() {
         if !c.is_alphanumeric() {
             return Err(ParserValidationError::InvalidPositionalArgumentFormat);
         }
     }
+     */
 
     Ok(arg_value)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::parser_validations::is_valid_arg_name;
+    use crate::lexer::validators::is_valid_arg_name;
 
     #[test]
     fn test_is_valid_arg_name() {
