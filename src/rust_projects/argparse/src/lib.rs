@@ -1,14 +1,15 @@
-pub mod lexer;
+pub mod named_arg_parser;
+pub mod validators;
 
 use core::fmt;
 use std::{collections::hash_map, error::Error, vec};
 
 #[derive(Debug)]
 pub enum ParserError {
-    FlagValidationError(lexer::validators::ParserValidationError),
-    NamedArgValidationError(lexer::validators::ParserValidationError),
-    LongFlagValidationError(lexer::validators::ParserValidationError),
-    PositionalArgumentValidationError(lexer::validators::ParserValidationError),
+    FlagValidationError(validators::ParserValidationError),
+    NamedArgValidationError(validators::ParserValidationError),
+    LongFlagValidationError(validators::ParserValidationError),
+    PositionalArgumentValidationError(validators::ParserValidationError),
 }
 
 impl Error for ParserError {}
@@ -221,7 +222,7 @@ impl Parser {
                 // We go with the named arg workflow if the arg contains an '='
                 if arg.contains('=') {
                     // Process a named arg
-                    match lexer::validators::validate_named_arguments_format(&arg) {
+                    match validators::validate_named_arguments_format(&arg) {
                         Ok((arg_name, arg_val)) => {
                             toks.push(ArgToken::NamedArgument {
                                 arg: arg_name,
@@ -233,7 +234,7 @@ impl Parser {
                         }
                     }
                 } else {
-                    match lexer::validators::validate_long_flag_format(&arg) {
+                    match validators::validate_long_flag_format(&arg) {
                         Ok(flag_name) => {
                             toks.push(ArgToken::LongFlag(flag_name));
                         }
@@ -244,7 +245,7 @@ impl Parser {
                 }
             } else if arg.starts_with("-") {
                 // Process a flag
-                match lexer::validators::validate_flag_format(&arg) {
+                match validators::validate_flag_format(&arg) {
                     Ok(flags) => {
                         for f in flags {
                             toks.push(ArgToken::ShortFlag(f));
@@ -256,7 +257,7 @@ impl Parser {
                 }
             } else {
                 // Process positional arguments
-                match lexer::validators::validate_positional_arguments_format(&arg) {
+                match validators::validate_positional_arguments_format(&arg) {
                     Ok(value) => {
                         toks.push(ArgToken::PositionalArgument(value));
                     }

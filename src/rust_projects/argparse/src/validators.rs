@@ -169,7 +169,7 @@ pub fn validate_positional_arguments_format(arg: &str) -> Result<String, ParserV
 
 #[cfg(test)]
 mod tests {
-    use crate::lexer::validators::is_valid_arg_name;
+    use crate::validators::is_valid_arg_name;
 
     #[test]
     fn test_is_valid_arg_name() {
