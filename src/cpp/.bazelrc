@@ -1,2 +1,8 @@
 build --repo_env='CC=clang++'
-build --repo_env='BAZEL_CXXOPTS=-std=c++23'
+# build --repo_env='BAZEL_CXXOPTS=-std=c++23'
+build --copt -std=c++23
+#build --copt -fmodules
+#build --copt -fno-implicit-modules
+#build --copt -fbuiltin-module-map
+#build --copt -stdlib=libc++
+#build --linkopt -stdlib=libc++

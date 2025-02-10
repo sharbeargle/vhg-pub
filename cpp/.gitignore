@@ -1,6 +1,0 @@
-bazel-bin
-bazel-cpp
-bazel-out
-bazel-source
-bazel-testlogs
-MODULE.bazel.lock
