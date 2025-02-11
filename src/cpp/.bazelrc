@@ -1,6 +1,12 @@
-build --repo_env='CC=clang++'
-# build --repo_env='BAZEL_CXXOPTS=-std=c++23'
+# To build for C++23
+#    1. Install clang-19 (symlink /usr/bin/clang++ -> /usr/lib/llvm-19/bin/clang++)
+#    2. Install g++-14 (which will give you libstdc++-14-dev)
+#    3. Add the following two lines
+build --repo_env=CC=clang++
 build --copt -std=c++23
+
+#### These don't seem like they're needed
+#build --repo_env='BAZEL_CXXOPTS=-std=c++23'
 #build --copt -fmodules
 #build --copt -fno-implicit-modules
 #build --copt -fbuiltin-module-map
