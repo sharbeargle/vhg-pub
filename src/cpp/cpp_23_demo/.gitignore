@@ -1,0 +1,11 @@
+bazel-bin
+bazel-cpp
+bazel-out
+bazel-source
+bazel-testlogs
+MODULE.bazel.lock
+
+CMakeCache.txt
+cmake_install.cmake
+CMakeFiles/
+Makefile
