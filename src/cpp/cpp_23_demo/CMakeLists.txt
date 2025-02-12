@@ -1,3 +1,7 @@
+#### To build for C++23
+#    1. Install clang-19 (symlink /usr/bin/clang++ -> /usr/lib/llvm-19/bin/clang++)
+#    2. Install g++-14 (which will give you libstdc++-14-dev)
+
 #### Set your C compiler to clang before running cmake . 
 # export CC=/usr/bin/clang
 # export CXX=/usr/bin/clang++
