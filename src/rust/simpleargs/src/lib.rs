@@ -1,11 +1,21 @@
+use std::vec;
+
 /// Specify what type the argument value should be
 #[derive(PartialEq, Eq, Debug)]
 pub enum ArgType {
-    Boolean,
     Character,
     Float,
     Integer,
     String,
+}
+
+/// A parsed argument
+pub enum Arg {
+    Character(char),
+    Float(f32),
+    Integer(i32),
+    String(String),
+    Boolean(bool),
 }
 
 pub struct FlagConfig {
@@ -13,14 +23,16 @@ pub struct FlagConfig {
     shortFlag: char,
     longFlag: String,
     required: bool,
-    hasArg: bool,
+    // None implies boolean flag
     argType: Option<ArgType>,
     description: String,
 }
 
 pub struct ArgConfig {
     name: String,
-    argType: Option<ArgType>,
+    // Currently will be string no matter what is set
+    // TODO: Fix this.
+    argType: ArgType,
     required: bool,
     description: String,
 }
@@ -28,10 +40,14 @@ pub struct ArgConfig {
 // TODO: Define and implement how configuration will be stored
 pub struct Parser {
     description: String,
+    inputArgs: Vec<String>,
 }
 
 pub fn new(description: String) -> Parser {
-    Parser { description }
+    Parser {
+        description: description,
+        inputArgs: vec![],
+    }
 }
 
 // TODO: decide how flags syntax
@@ -46,7 +62,6 @@ impl Parser {
 
     /// Add a positional argument to the configuration
     /// Parsed in order added. Adding required args after unrequired args will have undefined behavior.
-    /// arg_type: Not used right now. Just put None.
     pub fn add_arg(mut self, arg_config: ArgConfig) -> Self {
         self
     }
@@ -56,35 +71,45 @@ impl Parser {
 
     /// Parse the command line arguments
     /// Validate configuration.
-    pub fn parse(mut self) -> Self {
-        // TODO: define how the flags will be Parsed
-        let mut args = std::env::args();
+    pub fn parse(mut self, input_args: impl Iterator<Item = String>) -> Self {
+        let mut intermediate_args: Vec<String> = vec![];
+
+        // Parse into intermediate format
+        // TODO: Do some validations on the flag format
+        for item in input_args {
+            if item.starts_with("--") {
+                match item.split_once('=') {
+                    Some((flag, arg)) => {
+                        if flag.len() < 2 || arg.len() < 1 {
+                            panic!("Fix me: crashed because received flag w/ arg with no flag name or no arg");
+                        }
+                        intermediate_args.push(flag.to_owned());
+                        intermediate_args.push(arg.to_owned());
+                    }
+                    None => {
+                        intermediate_args.push(item);
+                    }
+                }
+            } else if item.starts_with("-") {
+                if item.len() < 3 {
+                    intermediate_args.push(item);
+                } else {
+                    let (flag, arg) = item.split_at(2);
+                    intermediate_args.push(flag.to_owned());
+                    intermediate_args.push(arg.to_owned());
+                }
+            } else {
+                intermediate_args.push(item);
+            }
+        }
+
+        // TODO: parse from intermediate format
+        for item in intermediate_args {}
 
         self
     }
 
-    pub fn get_flag_as_boolean(&self, name: &str) -> Option<bool> {
-        None
-    }
-
-    pub fn get_flag_as_character(&self, name: &str) -> Option<char> {
-        None
-    }
-
-    pub fn get_flag_as_integer(&self, name: &str) -> Option<i32> {
-        None
-    }
-
-    pub fn get_flag_as_float(&self, name: &str) -> Option<f32> {
-        None
-    }
-
-    pub fn get_flag_as_string(&self, name: &str) -> Option<&str> {
-        None
-    }
-
-    /// Get all positional argument
-    pub fn get_arg_as_string(&self, name: &str) -> Option<&Vec<String>> {
+    pub fn get_arg(&self, name: &str) -> Option<Arg> {
         None
     }
 }
