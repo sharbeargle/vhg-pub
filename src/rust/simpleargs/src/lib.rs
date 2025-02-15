@@ -1,4 +1,6 @@
-use std::vec;
+use std::{collections::HashMap, vec};
+
+mod arg_validators;
 
 /// Specify what type the argument value should be
 #[derive(PartialEq, Eq, Debug)]
@@ -20,8 +22,8 @@ pub enum Arg {
 
 pub struct FlagConfig {
     name: String,
-    shortFlag: char,
-    longFlag: String,
+    shortFlag: Option<char>,
+    longFlag: Option<String>,
     required: bool,
     // None implies boolean flag
     argType: Option<ArgType>,
@@ -40,13 +42,21 @@ pub struct ArgConfig {
 // TODO: Define and implement how configuration will be stored
 pub struct Parser {
     description: String,
-    inputArgs: Vec<String>,
+    flagConfigs: Vec<FlagConfig>,
+    // Map a flag to an index in flagConfigs
+    flagMap: HashMap<String, usize>,
+    argConfigs: Vec<ArgConfig>,
+    // name -> arg value
+    parsedArgs: HashMap<String, Arg>,
 }
 
 pub fn new(description: String) -> Parser {
     Parser {
         description: description,
-        inputArgs: vec![],
+        flagConfigs: vec![],
+        argConfigs: vec![],
+        flagMap: HashMap::new(),
+        parsedArgs: HashMap::new(),
     }
 }
 
@@ -54,15 +64,22 @@ pub fn new(description: String) -> Parser {
 // Should it be -f=<arg>, or -f <arg>, or -f<arg>
 // Maybe support all of those cases
 impl Parser {
-    /// Add a flag to the configuration
-    /// A flag with no value is a boolean.
     pub fn add_flag(mut self, flag_config: FlagConfig) -> Self {
+        if let Some(flag) = &flag_config.longFlag {
+            self.flagMap.insert(flag.clone(), self.flagConfigs.len());
+        }
+        if let Some(flag) = &flag_config.shortFlag {
+            self.flagMap
+                .insert(flag.clone().to_string(), self.flagConfigs.len());
+        }
+        self.flagConfigs.push(flag_config);
         self
     }
 
     /// Add a positional argument to the configuration
     /// Parsed in order added. Adding required args after unrequired args will have undefined behavior.
     pub fn add_arg(mut self, arg_config: ArgConfig) -> Self {
+        self.argConfigs.push(arg_config);
         self
     }
 
