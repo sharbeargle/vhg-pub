@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error, rc::Rc, vec};
+use std::{collections::HashMap, error::Error, rc::Rc, thread::panicking, vec};
 
 mod arg_validators;
 use arg_validators::*;
@@ -25,8 +25,9 @@ pub enum Arg {
     None,
 }
 
-pub struct FlagConfig {
+pub struct ArgConfig {
     name: String,
+    /// If short_flag and long_flag == None, then this is a positional argument
     short_flag: Option<char>,
     long_flag: Option<String>,
     required: bool,
@@ -35,22 +36,13 @@ pub struct FlagConfig {
     description: String,
 }
 
-pub struct ArgConfig {
-    name: String,
-    // Currently will be string no matter what is set
-    // TODO: Fix this.
-    arg_type: ArgType,
-    required: bool,
-    description: String,
-}
-
 // TODO: Define and implement how configuration will be stored
 pub struct Parser {
     description: String,
     command: String,
-    flag_configs: Vec<Rc<FlagConfig>>,
+    flag_configs: Vec<Rc<ArgConfig>>,
     /// Map a flag to an index in flagConfigs
-    flag_map: HashMap<String, Rc<FlagConfig>>,
+    flag_map: HashMap<String, Rc<ArgConfig>>,
     arg_configs: Vec<ArgConfig>,
     /// name -> arg value
     required_parsed_args: HashMap<String, Arg>,
@@ -76,10 +68,10 @@ pub enum ParserError {
 }
 
 impl Parser {
-    fn add_flag_config(&mut self, flag_config: FlagConfig) -> Result<(), ParserError> {
+    fn add_flag_config(&mut self, flag_config: ArgConfig) -> Result<(), ParserError> {
         // TODO: validate_flag_config() -> Result<>
 
-        let rc_flag_config: Rc<FlagConfig> = Rc::new(flag_config);
+        let rc_flag_config: Rc<ArgConfig> = Rc::new(flag_config);
 
         // Add mapping from long_flag to flag_config
         if let Some(long_flag) = &rc_flag_config.long_flag {
@@ -130,17 +122,30 @@ impl Parser {
 }
 
 impl Parser {
-    pub fn add_flag(mut self, flag_config: FlagConfig) -> Self {
-        // TODO: Print useful debug information
-        self.add_flag_config(flag_config).unwrap();
-        self
-    }
+    pub fn add_flag(
+        mut self,
+        name: String,
+        long_flag: Option<String>,
+        short_flag: Option<char>,
+        required: bool,
+        arg_type: Option<ArgType>,
+        description: String,
+    ) -> Self {
+        let flag_config = ArgConfig {
+            name: name,
+            short_flag: short_flag,
+            long_flag: long_flag,
+            required: required,
+            arg_type: arg_type,
+            description: description,
+        };
+        // TODO: Print useful debug information instead of panic!
+        if let (None, None) = (&flag_config.long_flag, &flag_config.short_flag) {
+            self.add_arg_config(flag_config).unwrap();
+        } else {
+            self.add_flag_config(flag_config).unwrap();
+        }
 
-    /// Add a positional argument to the configuration
-    /// Parsed in order added. Adding required args after unrequired args will have undefined behavior.
-    pub fn add_arg(mut self, arg_config: ArgConfig) -> Self {
-        // TODO: Print useful debug information
-        self.add_arg_config(arg_config).unwrap();
         self
     }
 
@@ -185,70 +190,51 @@ impl Parser {
         while let Some(item) = args_iter.next() {
             if arg_validators::is_flag(&item) {
                 // If it's a flag, check it's type and set it based on the type
-                if let Some(flag_config) = self.flag_map.get(&item) {
-                    if flag_config.required {
-                        match &flag_config.arg_type {
-                            Some(arg_type) => {
-                                let next_item = args_iter.next();
-                                match next_item {
-                                    None => {
-                                        panic!("expected argument")
-                                    }
-                                    Some(arg) => {
-                                        if arg_validators::is_flag(&arg) {
-                                            panic!("expected arg value, got flag instead");
-                                        }
-                                        match arg_type {
-                                            ArgType::Character => {
-                                                if arg.len() > 1 {
-                                                    panic!("expected char arg, but got string");
-                                                }
-                                                let mut parsed_arg = self
-                                                    .required_parsed_args
-                                                    .get_mut(&flag_config.name)
-                                                    .unwrap();
-                                                *parsed_arg =
-                                                    Arg::Character(arg.chars().next().unwrap());
-                                            }
-                                            ArgType::Float => todo!(),
-                                            ArgType::Integer => todo!(),
-                                            ArgType::String => todo!(),
-                                        }
-                                    }
-                                }
-                            }
-                            None => {
-                                // Assume this is boolean
-                                let mut arg_value = self
-                                    .required_parsed_args
-                                    .get_mut(&flag_config.name)
-                                    .unwrap();
-                                *arg_value = Arg::Boolean(true);
-                            }
-                        }
-                    } else {
-                        match &flag_config.arg_type {
-                            Some(arg_type) => {
-                                /*
-                                TODO: Implement this
-                                match arg_type {
+                let flag_config = if let Some(flag_config) = self.flag_map.get(&item) {
+                    flag_config
+                } else {
+                    panic!("Flag not defined");
+                };
 
-                                } */
+                let parsed_arg = match &flag_config.arg_type {
+                    // Having an arg_type means we need to parse it
+                    // None implies boolean
+                    Some(arg_type) => {
+                        let next_arg = match args_iter.next() {
+                            None => panic!("expected argument"),
+                            Some(arg) => arg,
+                        };
+
+                        if arg_validators::is_flag(&next_arg) {
+                            panic!("expected arg value, got flag instead");
+                        }
+
+                        // Return an Arg enum based on the arg_type
+                        match arg_type {
+                            ArgType::Character => {
+                                if next_arg.len() > 1 {
+                                    panic!("expected char arg, but got string");
+                                }
+
+                                Arg::Character(next_arg.chars().next().unwrap())
                             }
-                            None => {
-                                // Assume this is boolean
-                                let mut arg_value = self
-                                    .optional_parsed_args
-                                    .get_mut(&flag_config.name)
-                                    .unwrap();
-                                *arg_value = Arg::Boolean(true);
-                            }
+                            ArgType::Float => Arg::Float(next_arg.parse().unwrap()),
+                            ArgType::Integer => Arg::Integer(next_arg.parse().unwrap()),
+                            ArgType::String => Arg::String(next_arg.to_owned()),
                         }
                     }
+                    None => Arg::Boolean(true),
+                };
+
+                if flag_config.required {
+                    self.required_parsed_args
+                        .insert(flag_config.name.clone(), parsed_arg);
                 } else {
-                    // TODO: Should print useful information and then print help instead of panicking
-                    panic!("Flag DNE");
+                    self.optional_parsed_args
+                        .insert(flag_config.name.clone(), parsed_arg);
                 }
+            } else { // Not a flag
+                 // TODO: Process arg if not a flag i.e. positional arg
             }
         }
 
