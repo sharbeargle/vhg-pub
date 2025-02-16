@@ -22,11 +22,11 @@ pub enum Arg {
 
 pub struct FlagConfig {
     name: String,
-    shortFlag: Option<char>,
-    longFlag: Option<String>,
+    short_flag: Option<char>,
+    long_flag: Option<String>,
     required: bool,
     // None implies boolean flag
-    argType: Option<ArgType>,
+    arg_type: Option<ArgType>,
     description: String,
 }
 
@@ -34,7 +34,7 @@ pub struct ArgConfig {
     name: String,
     // Currently will be string no matter what is set
     // TODO: Fix this.
-    argType: ArgType,
+    arg_type: ArgType,
     required: bool,
     description: String,
 }
@@ -42,44 +42,41 @@ pub struct ArgConfig {
 // TODO: Define and implement how configuration will be stored
 pub struct Parser {
     description: String,
-    flagConfigs: Vec<FlagConfig>,
-    // Map a flag to an index in flagConfigs
-    flagMap: HashMap<String, usize>,
-    argConfigs: Vec<ArgConfig>,
-    // name -> arg value
-    parsedArgs: HashMap<String, Arg>,
+    flag_configs: Vec<FlagConfig>,
+    /// Map a flag to an index in flagConfigs
+    flag_map: HashMap<String, usize>,
+    arg_configs: Vec<ArgConfig>,
+    /// name -> arg value
+    parsed_args: HashMap<String, Arg>,
 }
 
 pub fn new(description: String) -> Parser {
     Parser {
         description: description,
-        flagConfigs: vec![],
-        argConfigs: vec![],
-        flagMap: HashMap::new(),
-        parsedArgs: HashMap::new(),
+        flag_configs: vec![],
+        arg_configs: vec![],
+        flag_map: HashMap::new(),
+        parsed_args: HashMap::new(),
     }
 }
 
-// TODO: decide how flags syntax
-// Should it be -f=<arg>, or -f <arg>, or -f<arg>
-// Maybe support all of those cases
 impl Parser {
     pub fn add_flag(mut self, flag_config: FlagConfig) -> Self {
-        if let Some(flag) = &flag_config.longFlag {
-            self.flagMap.insert(flag.clone(), self.flagConfigs.len());
+        if let Some(flag) = &flag_config.long_flag {
+            self.flag_map.insert(flag.clone(), self.flag_configs.len());
         }
-        if let Some(flag) = &flag_config.shortFlag {
-            self.flagMap
-                .insert(flag.clone().to_string(), self.flagConfigs.len());
+        if let Some(flag) = &flag_config.short_flag {
+            self.flag_map
+                .insert(flag.clone().to_string(), self.flag_configs.len());
         }
-        self.flagConfigs.push(flag_config);
+        self.flag_configs.push(flag_config);
         self
     }
 
     /// Add a positional argument to the configuration
     /// Parsed in order added. Adding required args after unrequired args will have undefined behavior.
     pub fn add_arg(mut self, arg_config: ArgConfig) -> Self {
-        self.argConfigs.push(arg_config);
+        self.arg_configs.push(arg_config);
         self
     }
 
@@ -87,7 +84,8 @@ impl Parser {
     pub fn print_help(&self) {}
 
     /// Parse the command line arguments
-    /// Validate configuration.
+    /// Short flag: -f=<arg> | -f <arg> | -f<arg>
+    /// Long flag: --flag=<arg> | --flag <arg>
     pub fn parse(mut self, input_args: impl Iterator<Item = String>) -> Self {
         let mut intermediate_args: Vec<String> = vec![];
 
