@@ -1,10 +1,15 @@
 use std::{collections::HashMap, rc::Rc, vec};
 
-mod arg_validators;
-use arg_validators::*;
-
 mod utils;
 use utils::*;
+
+#[derive(Debug)]
+pub enum ParserError {
+    FlagConfigError,
+    ArgConfigError,
+    MissingRequiredFlag,
+    TooManyPositionalArguments,
+}
 
 /// Specify what type the argument value should be
 #[derive(PartialEq, Eq, Debug)]
@@ -59,13 +64,8 @@ pub fn new(description: String) -> Parser {
     }
 }
 
-#[derive(Debug)]
-pub enum ParserError {
-    FlagConfigError,
-    ArgConfigError,
-}
-
 impl Parser {
+    /// Add a flag_config to the list of configs
     fn add_flag_config(&mut self, flag_config: ArgConfig) -> Result<(), ParserError> {
         // TODO: validate_flag_config() -> Result<>
 
@@ -94,12 +94,11 @@ impl Parser {
 
     fn add_arg_config(&mut self, arg_config: ArgConfig) -> Result<(), ParserError> {
         self.parsed_args.insert(arg_config.name.clone(), Arg::None);
-
         Ok(())
     }
 
     /// Takes iterator of Strings and splits up --flag=<val> into separate strings
-    /// returning vector of strings or error
+    /// returning vector of strings or error.
     fn tokenize_args(
         &self,
         input_args: impl Iterator<Item = String>,
@@ -133,9 +132,10 @@ impl Parser {
         Ok(intermediate_args)
     }
 
-    /// Parse the flag's argument value and return it as an Arg type
+    /// Parses a string representing the flag's argument value
+    /// and return it as an Arg of type defined by arg_type.
     fn parse_flag_arg(&self, arg_type: &ArgType, arg: &str) -> Arg {
-        if arg_validators::is_flag(&arg) {
+        if utils::is_flag(&arg) {
             panic!("expected arg value, got flag instead");
         }
 
@@ -151,6 +151,31 @@ impl Parser {
             ArgType::Integer => Arg::Integer(arg.parse().unwrap()),
             ArgType::String => Arg::String(arg.to_owned()),
         }
+    }
+
+    /// Check whether all required flags have been set.
+    /// Set all default flag values in parsed_args if unset.
+    fn validate_flags(&mut self) -> Result<(), ParserError> {
+        for item in &self.flag_configs {
+            if self.parsed_args.contains_key(&item.name) {
+                continue;
+            }
+
+            if item.required {
+                return Err(ParserError::MissingRequiredFlag);
+            }
+
+            match item.arg_type {
+                Some(_) => {
+                    self.parsed_args.insert(item.name.clone(), Arg::None);
+                }
+                None => {
+                    self.parsed_args
+                        .insert(item.name.clone(), Arg::Boolean(false));
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -201,7 +226,7 @@ impl Parser {
         let mut pos_args_iter = self.pos_arg_configs.iter();
 
         while let Some(item) = tokenized_args.next() {
-            if arg_validators::is_flag(&item) {
+            if utils::is_flag(&item) {
                 let flag_config = if let Some(flag_config) = self.flag_map.get(&item) {
                     flag_config
                 } else {
@@ -238,7 +263,9 @@ impl Parser {
             }
         }
 
-        // TODO: Verify all required flags have been parsed as well as all bool flags
+        if let Err(e) = self.validate_flags() {
+            println!("Error: {:?}", e);
+        }
 
         self
     }
@@ -253,5 +280,45 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_works() {}
+    fn it_works() {
+        let args: Vec<String> = vec![
+            "command".to_string(),
+            "--verbose".to_string(),
+            "--flag".to_string(),
+            "flagvalue".to_string(),
+        ];
+
+        let mut p = new("test parser".to_string())
+            .add_flag(
+                "verbose".to_string(),
+                Some("verbose".to_string()),
+                None,
+                false,
+                None,
+                "Flag verbose".to_string(),
+            )
+            .add_flag(
+                "myflag".to_string(),
+                Some("flag".to_string()),
+                None,
+                true,
+                Some(ArgType::String),
+                "Flag to test string".to_string(),
+            )
+            .add_flag(
+                "optionalFlag".to_string(),
+                Some("optionalFlag".to_string()),
+                None,
+                false,
+                Some(ArgType::String),
+                "Test optional flag".to_string(),
+            )
+            .parse(args.into_iter());
+
+        assert!(p.get_arg("verbose").is_some());
+        assert!(p.get_arg("myflag").is_some());
+
+        let arg = p.get_arg("optionalFlag");
+        assert!(matches!(Some(&Arg::None), arg));
+    }
 }
