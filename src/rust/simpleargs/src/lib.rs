@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error, rc::Rc, thread::panicking, vec};
+use std::{collections::HashMap, rc::Rc, vec};
 
 mod arg_validators;
 use arg_validators::*;
@@ -25,7 +25,7 @@ pub enum Arg {
     None,
 }
 
-pub struct ArgConfig {
+struct ArgConfig {
     name: String,
     /// If short_flag and long_flag == None, then this is a positional argument
     short_flag: Option<char>,
@@ -36,17 +36,16 @@ pub struct ArgConfig {
     description: String,
 }
 
-// TODO: Define and implement how configuration will be stored
 pub struct Parser {
     description: String,
     command: String,
     flag_configs: Vec<Rc<ArgConfig>>,
     /// Map a flag to an index in flagConfigs
     flag_map: HashMap<String, Rc<ArgConfig>>,
-    arg_configs: Vec<ArgConfig>,
+    /// Vector of positional args
+    pos_arg_configs: Vec<ArgConfig>,
     /// name -> arg value
-    required_parsed_args: HashMap<String, Arg>,
-    optional_parsed_args: HashMap<String, Arg>,
+    parsed_args: HashMap<String, Arg>,
 }
 
 pub fn new(description: String) -> Parser {
@@ -54,10 +53,9 @@ pub fn new(description: String) -> Parser {
         description: description,
         command: "".to_string(),
         flag_configs: vec![],
-        arg_configs: vec![],
+        pos_arg_configs: vec![],
         flag_map: HashMap::new(),
-        required_parsed_args: HashMap::new(),
-        optional_parsed_args: HashMap::new(),
+        parsed_args: HashMap::new(),
     }
 }
 
@@ -89,35 +87,70 @@ impl Parser {
             );
         }
 
-        // If no arg_type specified, assume it's a boolean flag which defaults to false
-        let flag_arg = match rc_flag_config.arg_type {
-            None => Arg::Boolean(false),
-            _ => Arg::None,
-        };
-
-        if rc_flag_config.required {
-            self.required_parsed_args
-                .insert(rc_flag_config.name.clone(), flag_arg);
-        } else {
-            self.optional_parsed_args
-                .insert(rc_flag_config.name.clone(), flag_arg);
-        }
-
         self.flag_configs.push(rc_flag_config);
 
         Ok(())
     }
 
     fn add_arg_config(&mut self, arg_config: ArgConfig) -> Result<(), ParserError> {
-        if arg_config.required {
-            self.required_parsed_args
-                .insert(arg_config.name.clone(), Arg::None);
-        } else {
-            self.optional_parsed_args
-                .insert(arg_config.name.clone(), Arg::None);
-        }
+        self.parsed_args.insert(arg_config.name.clone(), Arg::None);
 
         Ok(())
+    }
+
+    /// Takes iterator of Strings and splits up --flag=<val> into separate strings
+    /// returning vector of strings or error
+    fn tokenize_args(
+        &self,
+        input_args: impl Iterator<Item = String>,
+    ) -> Result<Vec<String>, ParserError> {
+        let mut intermediate_args: Vec<String> = vec![];
+        // Parse into intermediate format
+        for item in input_args {
+            if is_long_flag(&item) {
+                match item.split_once('=') {
+                    Some((flag, arg)) => {
+                        // TODO: validate_flag()
+                        intermediate_args.push(flag.to_owned());
+                        intermediate_args.push(arg.to_owned());
+                    }
+                    None => intermediate_args.push(item),
+                }
+            } else if is_short_flag(&item) {
+                if item.len() < 3 {
+                    // 'Check if only flag e.g. -X'
+                    intermediate_args.push(item);
+                } else {
+                    let (flag, arg) = item.split_at(2);
+                    intermediate_args.push(flag.to_owned());
+                    intermediate_args.push(arg.to_owned());
+                }
+            } else {
+                intermediate_args.push(item);
+            }
+        }
+
+        Ok(intermediate_args)
+    }
+
+    /// Parse the flag's argument value and return it as an Arg type
+    fn parse_flag_arg(&self, arg_type: &ArgType, arg: &str) -> Arg {
+        if arg_validators::is_flag(&arg) {
+            panic!("expected arg value, got flag instead");
+        }
+
+        match arg_type {
+            ArgType::Character => {
+                if arg.len() > 1 {
+                    panic!("expected char arg, but got string");
+                }
+
+                Arg::Character(arg.chars().next().unwrap())
+            }
+            ArgType::Float => Arg::Float(arg.parse().unwrap()),
+            ArgType::Integer => Arg::Integer(arg.parse().unwrap()),
+            ArgType::String => Arg::String(arg.to_owned()),
+        }
     }
 }
 
@@ -159,37 +192,16 @@ impl Parser {
         // Assume there is at least one arg and the first one is the command
         self.command = input_args.next().unwrap();
 
-        let mut intermediate_args: Vec<String> = vec![];
-        // Parse into intermediate format
-        for item in input_args {
-            if is_long_flag(&item) {
-                match item.split_once('=') {
-                    Some((flag, arg)) => {
-                        // TODO: validate_flag()
-                        intermediate_args.push(flag.to_owned());
-                        intermediate_args.push(arg.to_owned());
-                    }
-                    None => intermediate_args.push(item),
-                }
-            } else if is_short_flag(&item) {
-                if item.len() < 3 {
-                    // 'Check if only flag e.g. -X'
-                    intermediate_args.push(item);
-                } else {
-                    let (flag, arg) = item.split_at(2);
-                    intermediate_args.push(flag.to_owned());
-                    intermediate_args.push(arg.to_owned());
-                }
-            } else {
-                intermediate_args.push(item);
-            }
-        }
+        let mut tokenized_args = if let Ok(tokens) = self.tokenize_args(input_args) {
+            tokens.into_iter()
+        } else {
+            panic!("Problem tokenizing args");
+        };
 
-        // TODO: parse from intermediate format
-        let mut args_iter = intermediate_args.into_iter();
-        while let Some(item) = args_iter.next() {
+        let mut pos_args_iter = self.pos_arg_configs.iter();
+
+        while let Some(item) = tokenized_args.next() {
             if arg_validators::is_flag(&item) {
-                // If it's a flag, check it's type and set it based on the type
                 let flag_config = if let Some(flag_config) = self.flag_map.get(&item) {
                     flag_config
                 } else {
@@ -197,58 +209,42 @@ impl Parser {
                 };
 
                 let parsed_arg = match &flag_config.arg_type {
-                    // Having an arg_type means we need to parse it
                     // None implies boolean
+                    None => Arg::Boolean(true),
+                    // Having an arg_type means we need to parse the next arg
                     Some(arg_type) => {
-                        let next_arg = match args_iter.next() {
+                        let next_arg = match tokenized_args.next() {
                             None => panic!("expected argument"),
                             Some(arg) => arg,
                         };
 
-                        if arg_validators::is_flag(&next_arg) {
-                            panic!("expected arg value, got flag instead");
-                        }
-
-                        // Return an Arg enum based on the arg_type
-                        match arg_type {
-                            ArgType::Character => {
-                                if next_arg.len() > 1 {
-                                    panic!("expected char arg, but got string");
-                                }
-
-                                Arg::Character(next_arg.chars().next().unwrap())
-                            }
-                            ArgType::Float => Arg::Float(next_arg.parse().unwrap()),
-                            ArgType::Integer => Arg::Integer(next_arg.parse().unwrap()),
-                            ArgType::String => Arg::String(next_arg.to_owned()),
-                        }
+                        self.parse_flag_arg(arg_type, &next_arg)
                     }
-                    None => Arg::Boolean(true),
                 };
 
-                if flag_config.required {
-                    self.required_parsed_args
-                        .insert(flag_config.name.clone(), parsed_arg);
+                self.parsed_args
+                    .insert(flag_config.name.clone(), parsed_arg);
+            } else {
+                // Parse positional argument
+                if let Some(flag_config) = pos_args_iter.next() {
+                    let arg_type = flag_config.arg_type.as_ref().unwrap();
+                    self.parsed_args.insert(
+                        flag_config.name.clone(),
+                        self.parse_flag_arg(arg_type, &item),
+                    );
                 } else {
-                    self.optional_parsed_args
-                        .insert(flag_config.name.clone(), parsed_arg);
+                    panic!("got more positional arguements than configured");
                 }
-            } else { // Not a flag
-                 // TODO: Process arg if not a flag i.e. positional arg
             }
         }
+
+        // TODO: Verify all required flags have been parsed as well as all bool flags
 
         self
     }
 
     pub fn get_arg(&self, name: &str) -> Option<&Arg> {
-        if let Some(arg) = self.required_parsed_args.get(name) {
-            return Some(arg);
-        } else if let Some(arg) = self.optional_parsed_args.get(name) {
-            return Some(arg);
-        }
-
-        None
+        self.parsed_args.get(name)
     }
 }
 
