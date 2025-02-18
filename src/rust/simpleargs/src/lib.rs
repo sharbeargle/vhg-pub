@@ -30,13 +30,14 @@ pub enum Arg {
     None,
 }
 
+/// If no short_flag or long_flag then this is a positional argument
+/// If no arg_type for short_flag or long_flag then this is boolean arg_type
+/// TODO: Support variable length positional args natively
 struct ArgConfig {
     name: String,
-    /// If short_flag and long_flag == None, then this is a positional argument
     short_flag: Option<char>,
     long_flag: Option<String>,
     required: bool,
-    // None implies boolean flag
     arg_type: Option<ArgType>,
     description: String,
 }
@@ -99,7 +100,7 @@ impl Parser {
 
     /// Takes iterator of Strings and splits up --flag=<val> into separate strings
     /// returning vector of strings or error.
-    fn tokenize_args(
+    fn tokenize_flag_arg_values(
         &self,
         input_args: impl Iterator<Item = String>,
     ) -> Result<Vec<String>, ParserError> {
@@ -134,7 +135,7 @@ impl Parser {
 
     /// Parses a string representing the flag's argument value
     /// and return it as an Arg of type defined by arg_type.
-    fn parse_flag_arg(&self, arg_type: &ArgType, arg: &str) -> Arg {
+    fn parse_flag_arg_value(&self, arg_type: &ArgType, arg: &str) -> Arg {
         if utils::is_flag(&arg) {
             panic!("expected arg value, got flag instead");
         }
@@ -208,7 +209,38 @@ impl Parser {
     }
 
     /// Print the help screen
-    pub fn print_help(&self) {}
+    pub fn print_help(&self) {
+        let mut flags_output: String = String::new();
+
+        flags_output.push('\n');
+        flags_output.push_str(&self.description);
+        flags_output.push('\n');
+        flags_output.push('\n');
+        flags_output.push_str("Usage\n\n");
+
+        for item in &self.flag_configs {
+            if let (None, None) = (item.short_flag, &item.long_flag) {
+                // TODO: Print positional output
+            } else {
+                if let Some(flag) = item.short_flag {
+                    flags_output.push_str(&format!("-{} ", flag));
+                }
+                if let Some(flag) = &item.long_flag {
+                    flags_output.push_str(&format!("--{} ", flag));
+                }
+                if let Some(arg_type) = &item.arg_type {
+                    flags_output.push_str(&format!("<{:?}> ", arg_type));
+                }
+                if item.required {
+                    flags_output.push_str("\n\t(required) ");
+                }
+                flags_output.push_str(&format!("\n\t{} ", &item.description));
+                flags_output.push('\n');
+            }
+        }
+
+        println!("{}", flags_output);
+    }
 
     /// Parse the command line arguments
     /// Short flag: -f=<arg> | -f <arg> | -f<arg>
@@ -217,7 +249,7 @@ impl Parser {
         // Assume there is at least one arg and the first one is the command
         self.command = input_args.next().unwrap();
 
-        let mut tokenized_args = if let Ok(tokens) = self.tokenize_args(input_args) {
+        let mut tokenized_args = if let Ok(tokens) = self.tokenize_flag_arg_values(input_args) {
             tokens.into_iter()
         } else {
             panic!("Problem tokenizing args");
@@ -243,7 +275,7 @@ impl Parser {
                             Some(arg) => arg,
                         };
 
-                        self.parse_flag_arg(arg_type, &next_arg)
+                        self.parse_flag_arg_value(arg_type, &next_arg)
                     }
                 };
 
@@ -255,7 +287,7 @@ impl Parser {
                     let arg_type = flag_config.arg_type.as_ref().unwrap();
                     self.parsed_args.insert(
                         flag_config.name.clone(),
-                        self.parse_flag_arg(arg_type, &item),
+                        self.parse_flag_arg_value(arg_type, &item),
                     );
                 } else {
                     panic!("got more positional arguements than configured");
@@ -288,7 +320,7 @@ mod tests {
             "flagvalue".to_string(),
         ];
 
-        let mut p = new("test parser".to_string())
+        let p = new("test parser".to_string())
             .add_flag(
                 "verbose".to_string(),
                 Some("verbose".to_string()),
@@ -314,6 +346,8 @@ mod tests {
                 "Test optional flag".to_string(),
             )
             .parse(args.into_iter());
+
+        p.print_help();
 
         assert!(p.get_arg("verbose").is_some());
         assert!(p.get_arg("myflag").is_some());
