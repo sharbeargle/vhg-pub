@@ -4,7 +4,7 @@ mod utils;
 use utils::*;
 
 #[derive(Debug)]
-pub enum ParserError {
+enum ParserError {
     FlagConfigError,
     ArgConfigError,
     MissingRequiredFlag,
@@ -94,7 +94,7 @@ impl Parser {
     }
 
     fn add_arg_config(&mut self, arg_config: ArgConfig) -> Result<(), ParserError> {
-        self.parsed_args.insert(arg_config.name.clone(), Arg::None);
+        self.pos_arg_configs.push(arg_config);
         Ok(())
     }
 
@@ -209,42 +209,61 @@ impl Parser {
     }
 
     /// Print the help screen
+    /// TODO: Left off here. Implement print_help()
     pub fn print_help(&self) {
-        let mut flags_output: String = String::new();
+        let mut help_output = format!("\n{}\n\n", &self.description);
+        help_output.push_str("usage: COMMAND [options] ");
 
-        flags_output.push('\n');
-        flags_output.push_str(&self.description);
-        flags_output.push('\n');
-        flags_output.push('\n');
-        flags_output.push_str("Usage\n\n");
+        for flag in &self.flag_configs {
+            if !flag.required {
+                continue;
+            }
+
+            if let Some(long_flag) = &flag.long_flag {
+                help_output.push_str(&format!("--{}=<{}> ", long_flag, &flag.name));
+            } else if let Some(short_flag) = &flag.short_flag {
+                help_output.push_str(&format!("-{}=<{}> ", short_flag, &flag.name));
+            }
+        }
+
+        for arg in &self.pos_arg_configs {
+            if arg.required {
+                help_output.push_str(&format!("<{}> ", &arg.name));
+            } else {
+                help_output.push_str(&format!("[<{}>] ", &arg.name));
+            }
+        }
+
+        help_output.push_str("\n\n");
 
         for item in &self.flag_configs {
             if let (None, None) = (item.short_flag, &item.long_flag) {
                 // TODO: Print positional output
             } else {
                 if let Some(flag) = item.short_flag {
-                    flags_output.push_str(&format!("-{} ", flag));
+                    help_output.push_str(&format!("-{} ", flag));
                 }
                 if let Some(flag) = &item.long_flag {
-                    flags_output.push_str(&format!("--{} ", flag));
+                    help_output.push_str(&format!("--{} ", flag));
                 }
                 if let Some(arg_type) = &item.arg_type {
-                    flags_output.push_str(&format!("<{:?}> ", arg_type));
+                    help_output.push_str(&format!("<{:?}> ", arg_type));
                 }
                 if item.required {
-                    flags_output.push_str("\n\t(required) ");
+                    help_output.push_str("\n\t(required) ");
                 }
-                flags_output.push_str(&format!("\n\t{} ", &item.description));
-                flags_output.push('\n');
+                help_output.push_str(&format!("\n\t{} ", &item.description));
+                help_output.push('\n');
             }
         }
 
-        println!("{}", flags_output);
+        println!("{}", help_output);
     }
 
     /// Parse the command line arguments
     /// Short flag: -f=<arg> | -f <arg> | -f<arg>
     /// Long flag: --flag=<arg> | --flag <arg>
+    /// Panics.
     pub fn parse(mut self, mut input_args: impl Iterator<Item = String>) -> Self {
         // Assume there is at least one arg and the first one is the command
         self.command = input_args.next().unwrap();
@@ -344,6 +363,14 @@ mod tests {
                 false,
                 Some(ArgType::String),
                 "Test optional flag".to_string(),
+            )
+            .add_flag(
+                "posArg".to_string(),
+                None,
+                None,
+                true,
+                Some(ArgType::String),
+                "Test positional argument".to_string(),
             )
             .parse(args.into_iter());
 
