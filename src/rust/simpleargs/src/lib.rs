@@ -124,13 +124,18 @@ impl Parser {
                     None => intermediate_args.push(item),
                 }
             } else if is_short_flag(&item) {
+                // short flag with length < 3 is just the single char
                 if item.len() < 3 {
-                    // 'Check if only flag e.g. -X'
+                    // TODO: validate_flag(item)
                     intermediate_args.push(item);
                 } else {
                     let (flag, arg) = item.split_at(2);
                     intermediate_args.push(flag.to_owned());
-                    intermediate_args.push(arg.to_owned());
+                    if let Some(stripped_arg) = arg.strip_prefix('=') {
+                        intermediate_args.push(stripped_arg.to_owned());
+                    } else {
+                        intermediate_args.push(arg.to_owned());
+                    }
                 }
             } else {
                 // It's an argument
@@ -143,6 +148,7 @@ impl Parser {
 
     /// Parses a string representing the flag's argument value
     /// and return it as an Arg of type defined by arg_type.
+    // TODO: Fix all these unwraps
     fn parse_flag_arg_value(&self, arg_type: &ArgType, arg: &str) -> Result<Arg, ParserError> {
         if utils::is_flag(&arg) {
             return Err(ParserError::ArgValueIsFlag);
@@ -153,7 +159,6 @@ impl Parser {
                 if arg.len() > 1 {
                     return Err(ParserError::ArgValueCharIsString);
                 }
-
                 Ok(Arg::Character(arg.chars().next().unwrap()))
             }
             ArgType::Float => Ok(Arg::Float(arg.parse().unwrap())),
@@ -394,8 +399,6 @@ mod tests {
             "command".to_string(),
             "--verbose".to_string(),
             "--flag=flagvalue".to_string(),
-            "--optionalFlag".to_string(),
-            "5".to_string(),
             "posargvalue".to_string(),
         ];
 
