@@ -29,15 +29,18 @@ pub fn validate_arg_config(_arg_config: &ArgConfig) -> bool {
     true
 }
 
+/*
 pub fn validate_flag_arg() -> bool {
-    /*
+
     if flag.len() < 2 || arg.len() < 1 {
                             panic!("Fix me: crashed because received flag w/ arg with no flag name or no arg");
                         }
-                         */
+
 
     true
 }
+
+     */
 
 pub fn is_flag(arg: &str) -> bool {
     arg.starts_with('-')

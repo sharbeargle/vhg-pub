@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc, vec};
+use std::{collections::HashMap, process::exit, rc::Rc, vec};
 
 mod utils;
 use utils::*;
@@ -226,7 +226,7 @@ impl Parser {
     }
 
     /// Print the help screen
-    //TODO: Clean this up
+    //TODO: Clean this up this logic
     pub fn print_help(&self) {
         let mut help_output = format!("\n{}\n\n", &self.description);
         help_output.push_str("usage: COMMAND [options] ");
@@ -252,6 +252,9 @@ impl Parser {
         }
 
         help_output.push_str("\n\nFlags:\n");
+
+        help_output.push_str(&format!("\n\t--help "));
+        help_output.push_str(&format!("\n\t\tPrint this help page\n"));
 
         for item in &self.flag_configs {
             if let (None, None) = (item.short_flag, &item.long_flag) {
@@ -293,25 +296,40 @@ impl Parser {
     /// Parse the command line arguments
     /// Short flag: -f=<arg> | -f <arg> | -f<arg>
     /// Long flag: --flag=<arg> | --flag <arg>
-    /// Panics.
+    /// TODO: Fix all the panics so they print the help page instead.
     pub fn parse(mut self, mut input_args: impl Iterator<Item = String>) -> Self {
-        // Assume there is at least one arg and the first one is the command
+        // There must be at least one arg and the first one is the command
         self.command = input_args.next().unwrap();
 
+        // Tokenize all the flag argument values:
+        // e.g. "--flag=value" turns into ["--flag", "value"]
         let mut tokenized_args = if let Ok(tokens) = self.tokenize_flag_arg_values(input_args) {
             tokens.into_iter()
         } else {
-            panic!("Problem tokenizing args");
+            println!("Problem tokenizing args");
+            self.print_help();
+            exit(-1);
         };
 
+        // Since positional args don't have flags, they can't be mapped to
+        // specific configs. To track which args map to which config, we
+        // consume the configs as an iteratator as we parse.
         let mut pos_args_iter = self.pos_arg_configs.iter();
 
+        // Main parsing loop
         while let Some(item) = tokenized_args.next() {
+            if &item == "--help" {
+                self.print_help();
+                exit(0);
+            }
+
             if utils::is_flag(&item) {
                 let flag_config = if let Some(flag_config) = self.flag_map.get(&item) {
                     flag_config
                 } else {
-                    panic!("Flag not defined");
+                    println!("Flag not defined");
+                    self.print_help();
+                    exit(-1);
                 };
 
                 let parsed_arg = match &flag_config.arg_type {
@@ -320,7 +338,11 @@ impl Parser {
                     // Having an arg_type means we need to parse the next arg
                     Some(arg_type) => {
                         let next_arg = match tokenized_args.next() {
-                            None => panic!("expected argument"),
+                            None => {
+                                println!("expected argument");
+                                self.print_help();
+                                exit(-1);
+                            }
                             Some(arg) => arg,
                         };
 
@@ -339,14 +361,17 @@ impl Parser {
                         self.parse_flag_arg_value(arg_type, &item).unwrap(),
                     );
                 } else {
-                    panic!("got more positional arguements than configured");
+                    println!("got more positional arguements than configured");
+                    self.print_help();
+                    exit(-1);
                 }
             }
         }
 
         if let Err(e) = self.validate_flags() {
             println!("Error: {:?}", e);
-            panic!();
+            self.print_help();
+            exit(-1);
         }
 
         self
