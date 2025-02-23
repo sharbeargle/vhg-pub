@@ -10,11 +10,11 @@ enum ParserError {
     MissingRequiredFlag,
     //TooManyPositionalArguments,
     ArgValueIsFlag,
-    ArgValueCharIsString,
+    IncorrectArgType,
 }
 
 /// Specify what type the argument value should be
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Debug)]
 pub enum ArgType {
     Character,
     Float,
@@ -23,6 +23,7 @@ pub enum ArgType {
 }
 
 /// A parsed argument
+#[derive(PartialEq, Debug)]
 pub enum Arg {
     Character(char),
     Float(f32),
@@ -32,9 +33,9 @@ pub enum Arg {
     None,
 }
 
-/// If no short_flag or long_flag then this is a positional argument
-/// If no arg_type for short_flag or long_flag then this is boolean arg_type
-/// TODO: Support variable length positional args natively
+/// If no short_flag or long_flag then this is a positional argument.
+/// If no arg_type for short_flag or long_flag then this is boolean arg_type.
+// TODO: Support variable length positional args natively
 struct ArgConfig {
     name: String,
     short_flag: Option<char>,
@@ -56,6 +57,7 @@ pub struct Parser {
     parsed_args: HashMap<String, Arg>,
 }
 
+/// Instantiate a new arg parser
 pub fn new(description: String) -> Parser {
     Parser {
         description: description,
@@ -96,7 +98,8 @@ impl Parser {
         Ok(())
     }
 
-    fn add_arg_config(&mut self, arg_config: ArgConfig) -> Result<(), ParserError> {
+    /// Add a positional arg config to the list of configs
+    fn add_pos_arg_config(&mut self, arg_config: ArgConfig) -> Result<(), ParserError> {
         if !utils::validate_arg_config(&arg_config) {
             return Err(ParserError::ArgConfigError);
         }
@@ -148,7 +151,6 @@ impl Parser {
 
     /// Parses a string representing the flag's argument value
     /// and return it as an Arg of type defined by arg_type.
-    // TODO: Fix all these unwraps
     fn parse_flag_arg_value(&self, arg_type: &ArgType, arg: &str) -> Result<Arg, ParserError> {
         if utils::is_flag(&arg) {
             return Err(ParserError::ArgValueIsFlag);
@@ -156,13 +158,21 @@ impl Parser {
 
         match arg_type {
             ArgType::Character => {
-                if arg.len() > 1 {
-                    return Err(ParserError::ArgValueCharIsString);
+                if arg.len() != 1 {
+                    return Err(ParserError::IncorrectArgType);
                 }
+
+                // Unwrap is okay here because of the length check above
                 Ok(Arg::Character(arg.chars().next().unwrap()))
             }
-            ArgType::Float => Ok(Arg::Float(arg.parse().unwrap())),
-            ArgType::Integer => Ok(Arg::Integer(arg.parse().unwrap())),
+            ArgType::Float => match arg.parse::<f32>() {
+                Err(_) => Err(ParserError::IncorrectArgType),
+                Ok(val) => Ok(Arg::Float(val)),
+            },
+            ArgType::Integer => match arg.parse::<i32>() {
+                Err(_) => Err(ParserError::IncorrectArgType),
+                Ok(val) => Ok(Arg::Integer(val)),
+            },
             ArgType::String => Ok(Arg::String(arg.to_owned())),
         }
     }
@@ -203,6 +213,7 @@ impl Parser {
 }
 
 impl Parser {
+    /// Define a flag configuration
     pub fn add_flag(
         mut self,
         name: String,
@@ -220,9 +231,10 @@ impl Parser {
             arg_type: arg_type,
             description: description,
         };
-        // TODO: Print useful debug information instead of panic!
+        // Unwrap here is okay because this indicates a bug in the
+        // configuration, not due to end user inputing incorrect args
         if let (None, None) = (&flag_config.long_flag, &flag_config.short_flag) {
-            self.add_arg_config(flag_config).unwrap();
+            self.add_pos_arg_config(flag_config).unwrap();
         } else {
             self.add_flag_config(flag_config).unwrap();
         }
@@ -231,7 +243,7 @@ impl Parser {
     }
 
     /// Print the help screen
-    //TODO: Clean this up this logic
+    //TODO: Print argument type correctly
     pub fn print_help(&self) {
         let mut help_output = format!("\n{}\n\n", &self.description);
         help_output.push_str("usage: COMMAND [options] ");
@@ -242,17 +254,23 @@ impl Parser {
             }
 
             if let Some(long_flag) = &flag.long_flag {
-                help_output.push_str(&format!("--{}=<{}> ", long_flag, &flag.name));
+                help_output.push_str(&format!(
+                    "--{}=<{}:{:?}> ",
+                    long_flag, &flag.name, &flag.arg_type
+                ));
             } else if let Some(short_flag) = &flag.short_flag {
-                help_output.push_str(&format!("-{}=<{}> ", short_flag, &flag.name));
+                help_output.push_str(&format!(
+                    "-{}=<{}:{:?}> ",
+                    short_flag, &flag.name, &flag.arg_type
+                ));
             }
         }
 
         for arg in &self.pos_arg_configs {
             if arg.required {
-                help_output.push_str(&format!("<{}> ", &arg.name));
+                help_output.push_str(&format!("<{}:{:?}> ", &arg.name, &arg.arg_type));
             } else {
-                help_output.push_str(&format!("[<{}>] ", &arg.name));
+                help_output.push_str(&format!("[<{}:{:?}>] ", &arg.name, &arg.arg_type));
             }
         }
 
@@ -262,27 +280,23 @@ impl Parser {
         help_output.push_str(&format!("\n\t\tPrint this help page\n"));
 
         for item in &self.flag_configs {
-            if let (None, None) = (item.short_flag, &item.long_flag) {
-                // TODO: Print positional output
-            } else {
-                if let Some(flag) = item.short_flag {
-                    help_output.push_str(&format!("\n\t-{} ", flag));
-                    if let Some(_arg_type) = &item.arg_type {
-                        help_output.push_str(&format!("<{}> ", &item.name));
-                    }
+            if let Some(flag) = item.short_flag {
+                help_output.push_str(&format!("\n\t-{} ", flag));
+                if let Some(arg_type) = &item.arg_type {
+                    help_output.push_str(&format!("<{}:{:?}> ", &item.name, arg_type));
                 }
-                if let Some(flag) = &item.long_flag {
-                    help_output.push_str(&format!("\n\t--{} ", flag));
-                    if let Some(_arg_type) = &item.arg_type {
-                        help_output.push_str(&format!("<{}> ", &item.name));
-                    }
-                }
-                if item.required {
-                    help_output.push_str("\n\t\t(required) ");
-                }
-                help_output.push_str(&format!("\n\t\t{}", &item.description));
-                help_output.push('\n');
             }
+            if let Some(flag) = &item.long_flag {
+                help_output.push_str(&format!("\n\t--{} ", flag));
+                if let Some(_arg_type) = &item.arg_type {
+                    help_output.push_str(&format!("<{}:{:?}> ", &item.name, &item.arg_type));
+                }
+            }
+            if item.required {
+                help_output.push_str("\n\t\t(required) ");
+            }
+            help_output.push_str(&format!("\n\t\t{}", &item.description));
+            help_output.push('\n');
         }
 
         help_output.push_str("\nPositional Arguments:\n");
@@ -299,12 +313,17 @@ impl Parser {
     }
 
     /// Parse the command line arguments
-    /// Short flag: -f=<arg> | -f <arg> | -f<arg>
-    /// Long flag: --flag=<arg> | --flag <arg>
-    /// TODO: Fix all the panics so they print the help page instead.
+    ///
+    /// - Short flag: -f=<arg> | -f <arg> | -f<arg>
+    /// - Long flag: --flag=<arg> | --flag <arg>
     pub fn parse(mut self, mut input_args: impl Iterator<Item = String>) -> Self {
         // There must be at least one arg and the first one is the command
-        self.command = input_args.next().unwrap();
+        self.command = if let Some(arg) = input_args.next() {
+            arg
+        } else {
+            println!("Must have more than one argument (the command)");
+            exit(-1);
+        };
 
         // Tokenize all the flag argument values:
         // e.g. "--flag=value" turns into ["--flag", "value"]
@@ -351,7 +370,14 @@ impl Parser {
                             Some(arg) => arg,
                         };
 
-                        self.parse_flag_arg_value(arg_type, &next_arg).unwrap()
+                        match self.parse_flag_arg_value(arg_type, &next_arg) {
+                            Ok(val) => val,
+                            Err(e) => {
+                                println!("{:?}", e);
+                                self.print_help();
+                                exit(-1);
+                            }
+                        }
                     }
                 };
 
@@ -360,11 +386,18 @@ impl Parser {
             } else {
                 // Parse positional argument
                 if let Some(flag_config) = pos_args_iter.next() {
+                    // Unwrap is safe here because we validate upon insertion
+                    // that positional args have an arg_type != None
                     let arg_type = flag_config.arg_type.as_ref().unwrap();
-                    self.parsed_args.insert(
-                        flag_config.name.clone(),
-                        self.parse_flag_arg_value(arg_type, &item).unwrap(),
-                    );
+                    let arg_value = match self.parse_flag_arg_value(arg_type, &item) {
+                        Ok(val) => val,
+                        Err(e) => {
+                            println!("{:?}", e);
+                            self.print_help();
+                            exit(-1);
+                        }
+                    };
+                    self.parsed_args.insert(flag_config.name.clone(), arg_value);
                 } else {
                     println!("got more positional arguements than configured");
                     self.print_help();
@@ -388,10 +421,81 @@ impl Parser {
     }
 }
 
-//TODO: Left off here: Create tests to test every condition
+//TODO: Left off here: Create tests
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_short_flags_with_args() {
+        let input_args: Vec<String> = vec![
+            "command".to_string(),
+            "-f=f_arg_val".to_string(),
+            "-gg_arg_val".to_string(),
+            "-h".to_string(),
+            "h_arg_val".to_string(),
+        ];
+
+        let p = new("test parser".to_string())
+            .add_flag(
+                "f_flag".to_string(),
+                None,
+                Some('f'),
+                true,
+                Some(ArgType::String),
+                "f_flag tests -f=f_arg_val".to_string(),
+            )
+            .add_flag(
+                "g_flag".to_string(),
+                None,
+                Some('g'),
+                true,
+                Some(ArgType::String),
+                "g_flag tests -gg_arg_val".to_string(),
+            )
+            .add_flag(
+                "h_flag".to_string(),
+                None,
+                Some('h'),
+                true,
+                Some(ArgType::String),
+                "h_flag tests -h h_arg_val".to_string(),
+            )
+            .parse(input_args.into_iter());
+
+        let f_val = "f_arg_val".to_string();
+        let f = p.get_arg("f_flag");
+        assert!(matches!(f, Some(Arg::String(_))));
+        let f = f.unwrap();
+        match f {
+            Arg::String(s) => {
+                assert_eq!(s, &f_val);
+            }
+            _ => {}
+        }
+
+        let g_val = "g_arg_val".to_string();
+        let g = p.get_arg("g_flag");
+        assert!(matches!(g, Some(Arg::String(_))));
+        let g = g.unwrap();
+        match g {
+            Arg::String(s) => {
+                assert_eq!(s, &g_val);
+            }
+            _ => {}
+        }
+
+        let h_val = "h_arg_val".to_string();
+        let h = p.get_arg("h_flag");
+        assert!(matches!(h, Some(Arg::String(_))));
+        let h = h.unwrap();
+        match h {
+            Arg::String(s) => {
+                assert_eq!(s, &h_val);
+            }
+            _ => {}
+        }
+    }
 
     #[test]
     fn it_works() {

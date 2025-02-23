@@ -1,7 +1,7 @@
-use simpleargs::*;
+use simpleargs::{ArgType, Parser};
 
-fn main() {
-    let _p = new("test parser".to_string())
+fn parse_args() -> Parser {
+    simpleargs::new("test parser".to_string())
         .add_flag(
             "verbose".to_string(),
             Some("verbose".to_string()),
@@ -34,7 +34,15 @@ fn main() {
             Some(ArgType::String),
             "Test positional argument".to_string(),
         )
-        .parse(std::env::args());
+        .parse(std::env::args())
+}
+
+fn main() {
+    let p = parse_args();
 
     println!("Demo of simpleargs usage");
+    println!("verbose: {:?}", p.get_arg("verbose"));
+    println!("myflag: {:?}", p.get_arg("myflag"));
+    println!("optionalFlag: {:?}", p.get_arg("optionalFlag"));
+    println!("posArg: {:?}", p.get_arg("posArg"));
 }
