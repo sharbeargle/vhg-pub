@@ -13,6 +13,13 @@ enum ParserError {
     IncorrectArgType,
 }
 
+#[derive(PartialEq, Debug)]
+enum FlagType {
+    ShortFlag,
+    LongFlag,
+    PositionalArgument,
+}
+
 /// Specify what type the argument value should be
 #[derive(PartialEq, Debug)]
 pub enum ArgType {
@@ -108,6 +115,43 @@ impl Parser {
         Ok(())
     }
 
+    /// "--flag=value" becomes ["--flag", "value"]
+    fn split_long_flag(&self, long_flag: &str) -> Vec<String> {
+        match long_flag.split_once('=') {
+            Some((flag, arg)) => {
+                vec![flag.to_owned(), arg.to_owned()]
+            }
+            None => vec![long_flag.to_owned()],
+        }
+    }
+
+    /// Whether it's "-f=value", "-fvalue", or "-f value", it becomes ["-f", "value"]
+    fn split_short_flag(&self, long_flag: &str) -> Vec<String> {
+        // short flag with length < 3 is just the single char
+        if long_flag.len() < 3 {
+            vec![long_flag.to_owned()]
+        } else {
+            let (flag, arg) = long_flag.split_at(2);
+            let arg_val = if let Some(stripped_arg) = arg.strip_prefix('=') {
+                stripped_arg.to_owned()
+            } else {
+                arg.to_owned()
+            };
+
+            vec![flag.to_owned(), arg_val]
+        }
+    }
+
+    fn get_flag_type(&self, item: &str) -> FlagType {
+        if is_long_flag(&item) {
+            FlagType::LongFlag
+        } else if is_short_flag(&item) {
+            FlagType::ShortFlag
+        } else {
+            FlagType::PositionalArgument
+        }
+    }
+
     /// Takes iterator of Strings and splits up --flag=<val> into separate strings
     /// returning vector of strings or error.
     fn tokenize_flag_arg_values(
@@ -117,32 +161,14 @@ impl Parser {
         let mut intermediate_args: Vec<String> = vec![];
         // Parse into intermediate format
         for item in input_args {
-            if is_long_flag(&item) {
-                match item.split_once('=') {
-                    Some((flag, arg)) => {
-                        // TODO: validate_flag()
-                        intermediate_args.push(flag.to_owned());
-                        intermediate_args.push(arg.to_owned());
-                    }
-                    None => intermediate_args.push(item),
-                }
-            } else if is_short_flag(&item) {
-                // short flag with length < 3 is just the single char
-                if item.len() < 3 {
-                    // TODO: validate_flag(item)
-                    intermediate_args.push(item);
-                } else {
-                    let (flag, arg) = item.split_at(2);
-                    intermediate_args.push(flag.to_owned());
-                    if let Some(stripped_arg) = arg.strip_prefix('=') {
-                        intermediate_args.push(stripped_arg.to_owned());
-                    } else {
-                        intermediate_args.push(arg.to_owned());
-                    }
-                }
-            } else {
-                // It's an argument
-                intermediate_args.push(item);
+            let split_flag: Vec<String> = match self.get_flag_type(&item) {
+                FlagType::LongFlag => self.split_long_flag(&item),
+                FlagType::ShortFlag => self.split_short_flag(&item),
+                FlagType::PositionalArgument => vec![item],
+            };
+
+            for val in split_flag {
+                intermediate_args.push(val);
             }
         }
 
@@ -189,6 +215,7 @@ impl Parser {
                 return Err(ParserError::MissingRequiredFlag);
             }
 
+            // For non-required fields, set their arg values
             match item.arg_type {
                 Some(_) => {
                     self.parsed_args.insert(item.name.clone(), Arg::None);
@@ -200,11 +227,7 @@ impl Parser {
             }
         }
         for item in &self.pos_arg_configs {
-            if self.parsed_args.contains_key(&item.name) {
-                continue;
-            }
-
-            if item.required {
+            if item.required && !self.parsed_args.contains_key(&item.name) {
                 return Err(ParserError::MissingRequiredFlag);
             }
         }
@@ -316,6 +339,7 @@ impl Parser {
     ///
     /// - Short flag: -f=<arg> | -f <arg> | -f<arg>
     /// - Long flag: --flag=<arg> | --flag <arg>
+    // TODO: Simplify this function. It is too complicated.
     pub fn parse(mut self, mut input_args: impl Iterator<Item = String>) -> Self {
         // There must be at least one arg and the first one is the command
         self.command = if let Some(arg) = input_args.next() {
@@ -425,6 +449,95 @@ impl Parser {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // TODO: Test args of various types are parsed correctly
+    // TODO: Test missing non-required flags are set appropriately
+    // TODO: Test missing required flags are returning errors appropriately
+
+    #[test]
+    fn test_bool_flags() {
+        let input_args: Vec<String> = vec![
+            "command".to_string(),
+            "-f".to_string(),
+            "--g_flag".to_string(),
+        ];
+
+        let p = new("test parser".to_string())
+            .add_flag(
+                "f_flag".to_string(),
+                None,
+                Some('f'),
+                true,
+                None,
+                "f_flag tests -f=f_arg_val".to_string(),
+            )
+            .add_flag(
+                "g_flag".to_string(),
+                Some("g_flag".to_string()),
+                None,
+                true,
+                None,
+                "g_flag tests -gg_arg_val".to_string(),
+            )
+            .parse(input_args.into_iter());
+
+        let f = p.get_arg("f_flag");
+        assert!(matches!(f, Some(Arg::Boolean(true))));
+
+        let g = p.get_arg("g_flag");
+        assert!(matches!(g, Some(Arg::Boolean(true))));
+    }
+
+    #[test]
+    fn test_long_flags_with_args() {
+        let input_args: Vec<String> = vec![
+            "command".to_string(),
+            "--f_flag=f_arg_val".to_string(),
+            "--g_flag".to_string(),
+            "g_arg_val".to_string(),
+        ];
+
+        let p = new("test parser".to_string())
+            .add_flag(
+                "f_flag".to_string(),
+                Some("f_flag".to_string()),
+                None,
+                true,
+                Some(ArgType::String),
+                "f_flag tests -f=f_arg_val".to_string(),
+            )
+            .add_flag(
+                "g_flag".to_string(),
+                Some("g_flag".to_string()),
+                None,
+                true,
+                Some(ArgType::String),
+                "g_flag tests -gg_arg_val".to_string(),
+            )
+            .parse(input_args.into_iter());
+
+        let f_val = "f_arg_val".to_string();
+        let f = p.get_arg("f_flag");
+        assert!(matches!(f, Some(Arg::String(_))));
+        let f = f.unwrap();
+        match f {
+            Arg::String(s) => {
+                assert_eq!(s, &f_val);
+            }
+            _ => {}
+        }
+
+        let g_val = "g_arg_val".to_string();
+        let g = p.get_arg("g_flag");
+        assert!(matches!(g, Some(Arg::String(_))));
+        let g = g.unwrap();
+        match g {
+            Arg::String(s) => {
+                assert_eq!(s, &g_val);
+            }
+            _ => {}
+        }
+    }
 
     #[test]
     fn test_short_flags_with_args() {
