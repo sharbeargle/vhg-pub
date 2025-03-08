@@ -346,6 +346,7 @@ impl Parser {
             arg
         } else {
             println!("Must have more than one argument (the command)");
+            self.print_help();
             exit(-1);
         };
 
@@ -445,15 +446,134 @@ impl Parser {
     }
 }
 
-//TODO: Left off here: Create tests
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // TODO: Test args of various types are parsed correctly
+    
     // TODO: Test missing non-required flags are set appropriately
     // TODO: Test missing required flags are returning errors appropriately
 
+    /// Verify args of various types are parsed correctly
+    #[test]
+    fn test_various_arg_types() {
+        let input_args: Vec<String> = vec![
+            "command".to_string(),
+            "--integer=50".to_string(),
+            "--float=0.401".to_string(),
+            "--character=x".to_string(),
+            "--string=string_of_characters".to_string(),
+            "--boolean".to_string(),
+            "100".to_string(),
+            "4.34".to_string(),
+            "y".to_string(),
+            "string_of_stuff".to_string(),
+        ];
+
+        let p = new("test parser".to_string())
+            .add_flag(
+                "integer".to_string(),
+                Some("integer".to_string()),
+                None,
+                true,
+                Some(ArgType::Integer),
+                "Test an Integer".to_string(),
+            )
+            .add_flag(
+                "float".to_string(),
+                Some("float".to_string()),
+                None,
+                true,
+                Some(ArgType::Float),
+                "Test an Float".to_string(),
+            )
+            .add_flag(
+                "character".to_string(),
+                Some("character".to_string()),
+                None,
+                true,
+                Some(ArgType::Character),
+                "Test an Character".to_string(),
+            )
+            .add_flag(
+                "string".to_string(),
+                Some("string".to_string()),
+                None,
+                true,
+                Some(ArgType::String),
+                "Test an String".to_string(),
+            )
+            .add_flag(
+                "boolean".to_string(),
+                Some("boolean".to_string()),
+                None,
+                true,
+                None,
+                "Test an boolean".to_string(),
+            )
+            .add_flag(
+                "positional_integer".to_string(),
+                None,
+                None,
+                true,
+                Some(ArgType::Integer),
+                "Test an Integer".to_string(),
+            )
+            .add_flag(
+                "positional_float".to_string(),
+                None,
+                None,
+                true,
+                Some(ArgType::Float),
+                "Test an Float".to_string(),
+            )
+            .add_flag(
+                "positional_character".to_string(),
+                None,
+                None,
+                true,
+                Some(ArgType::Character),
+                "Test an Character".to_string(),
+            )
+            .add_flag(
+                "positional_string".to_string(),
+                None,
+                None,
+                true,
+                Some(ArgType::String),
+                "Test an String".to_string(),
+            )
+            .parse(input_args.into_iter());
+
+        
+        let arg_res = p.get_arg("integer");
+        assert!(matches!(arg_res, Some(Arg::Integer(50))));
+        
+        let arg_res = p.get_arg("float");
+        assert!(matches!(arg_res, Some(Arg::Float(0.401))));
+
+        let arg_res = p.get_arg("character");
+        assert!(matches!(arg_res, Some(Arg::Character('x'))));
+
+        let arg_res = p.get_arg("string");
+        assert!(matches!(arg_res, Some(Arg::String(_))));
+        
+        let arg_res = p.get_arg("boolean");
+        assert!(matches!(arg_res, Some(Arg::Boolean(true))));
+
+        let arg_res = p.get_arg("positional_integer");
+        assert!(matches!(arg_res, Some(Arg::Integer(100))));
+        
+        let arg_res = p.get_arg("positional_float");
+        assert!(matches!(arg_res, Some(Arg::Float(4.34))));
+
+        let arg_res = p.get_arg("positional_character");
+        assert!(matches!(arg_res, Some(Arg::Character('y'))));
+
+        let arg_res = p.get_arg("positional_string");
+        assert!(matches!(arg_res, Some(Arg::String(_))));
+    }
+
+    /// Verify we can pass boolean short and long flags correctly
     #[test]
     fn test_bool_flags() {
         let input_args: Vec<String> = vec![
@@ -488,6 +608,8 @@ mod tests {
         assert!(matches!(g, Some(Arg::Boolean(true))));
     }
 
+    /// Verify that we can parse long flags with arguments correctly
+    /// regardless of the various syntax options for passing arguments
     #[test]
     fn test_long_flags_with_args() {
         let input_args: Vec<String> = vec![
@@ -540,6 +662,8 @@ mod tests {
     }
 
     #[test]
+    /// Verify that we can parse short flags with arguments correctly 
+    /// regardless of the various syntax options for passing arguments
     fn test_short_flags_with_args() {
         let input_args: Vec<String> = vec![
             "command".to_string(),
