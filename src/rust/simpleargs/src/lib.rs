@@ -226,10 +226,17 @@ impl Parser {
                 }
             }
         }
+
         for item in &self.pos_arg_configs {
-            if item.required && !self.parsed_args.contains_key(&item.name) {
+            if self.parsed_args.contains_key(&item.name) {
+                continue;
+            }
+
+            if item.required {
                 return Err(ParserError::MissingRequiredFlag);
             }
+
+            self.parsed_args.insert(item.name.clone(), Arg::None);
         }
         Ok(())
     }
@@ -449,9 +456,84 @@ impl Parser {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
-    // TODO: Test missing non-required flags are set appropriately
+
     // TODO: Test missing required flags are returning errors appropriately
+    // TODO: Test incorrect arg type are returning errors appropriately
+
+    // Test missing non-required flags are set appropriately
+    #[test]
+    fn test_non_required_flags() {
+        let input_args: Vec<String> = vec!["command".to_string()];
+
+        let p = new("test parser".to_string())
+            .add_flag(
+                "integer".to_string(),
+                Some("integer".to_string()),
+                None,
+                false,
+                Some(ArgType::Integer),
+                "Test a integer".to_string(),
+            )
+            .add_flag(
+                "float".to_string(),
+                Some("float".to_string()),
+                None,
+                false,
+                Some(ArgType::Float),
+                "Test an Float".to_string(),
+            )
+            .add_flag(
+                "character".to_string(),
+                Some("character".to_string()),
+                None,
+                false,
+                Some(ArgType::Character),
+                "Test an Character".to_string(),
+            )
+            .add_flag(
+                "string".to_string(),
+                Some("string".to_string()),
+                None,
+                false,
+                Some(ArgType::String),
+                "Test an String".to_string(),
+            )
+            .add_flag(
+                "boolean".to_string(),
+                Some("boolean".to_string()),
+                None,
+                false,
+                None,
+                "Test an boolean".to_string(),
+            )
+            .add_flag(
+                "positional_integer".to_string(),
+                None,
+                None,
+                false,
+                Some(ArgType::Integer),
+                "Test an Integer".to_string(),
+            )
+            .parse(input_args.into_iter());
+
+        let arg_res = p.get_arg("integer");
+        assert!(matches!(arg_res, Some(Arg::None)));
+
+        let arg_res = p.get_arg("float");
+        assert!(matches!(arg_res, Some(Arg::None)));
+
+        let arg_res = p.get_arg("character");
+        assert!(matches!(arg_res, Some(Arg::None)));
+
+        let arg_res = p.get_arg("string");
+        assert!(matches!(arg_res, Some(Arg::None)));
+
+        let arg_res = p.get_arg("boolean");
+        assert!(matches!(arg_res, Some(Arg::Boolean(false))));
+
+        let arg_res = p.get_arg("positional_integer");
+        assert!(matches!(arg_res, Some(Arg::None)));
+    }
 
     /// Verify args of various types are parsed correctly
     #[test]
@@ -544,10 +626,9 @@ mod tests {
             )
             .parse(input_args.into_iter());
 
-        
         let arg_res = p.get_arg("integer");
         assert!(matches!(arg_res, Some(Arg::Integer(50))));
-        
+
         let arg_res = p.get_arg("float");
         assert!(matches!(arg_res, Some(Arg::Float(0.401))));
 
@@ -556,13 +637,13 @@ mod tests {
 
         let arg_res = p.get_arg("string");
         assert!(matches!(arg_res, Some(Arg::String(_))));
-        
+
         let arg_res = p.get_arg("boolean");
         assert!(matches!(arg_res, Some(Arg::Boolean(true))));
 
         let arg_res = p.get_arg("positional_integer");
         assert!(matches!(arg_res, Some(Arg::Integer(100))));
-        
+
         let arg_res = p.get_arg("positional_float");
         assert!(matches!(arg_res, Some(Arg::Float(4.34))));
 
@@ -662,7 +743,7 @@ mod tests {
     }
 
     #[test]
-    /// Verify that we can parse short flags with arguments correctly 
+    /// Verify that we can parse short flags with arguments correctly
     /// regardless of the various syntax options for passing arguments
     fn test_short_flags_with_args() {
         let input_args: Vec<String> = vec![
